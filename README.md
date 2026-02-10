@@ -53,7 +53,7 @@ This is the fastest way to “feel” what Aura Guard does.
 
 ```bash
 git clone https://github.com/auraguarddev-debug/auraguard-dev.git
-cd aura-guard
+cd auraguard-dev
 
 pip install -e .
 aura-guard demo
