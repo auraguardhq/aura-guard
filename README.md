@@ -231,11 +231,7 @@ Example numbers (5 runs per scenario):
 
 Think of Aura Guard like a **seatbelt** for agents:
 
-```
-LLM  →  your agent loop  →  Aura Guard  →  tools (search / refund / etc.)
-                          ↑
-                 allow / cache / block / rewrite / escalate
-```
+![How Aura Guard sits between your agent loop and tools](docs/assets/how-it-works.png)
 
 Aura Guard keeps a small “memory” of what happened in the run:
 - which tools were called
