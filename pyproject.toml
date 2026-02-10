@@ -8,14 +8,14 @@ version = "0.3.1"
 description = "Cost governance for AI agents. Stop tool-call loops, prevent double side-effects, enforce spending caps."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [
   { name = "Aura Guard Contributors" }
 ]
 keywords = ["llm", "agents", "safety", "cost", "governance", "loops", "guardrails", "tools"]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Intended Audience :: Developers",

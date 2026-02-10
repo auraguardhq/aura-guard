@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- License changed from MIT to Apache-2.0.
+
 ## 0.3.1 — 2026-02-08
 
 ### Improvements
