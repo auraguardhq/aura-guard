@@ -52,7 +52,7 @@ This is the fastest way to “feel” what Aura Guard does.
 ### Option A (recommended for first-time users): run from a clone
 
 ```bash
-git clone https://github.com/auraguarddev-debug/aura-guard.git
+git clone https://github.com/auraguarddev-debug/auraguard-dev.git
 cd aura-guard
 
 pip install -e .
@@ -101,7 +101,7 @@ pip install -e .
 ### If you want to install directly from GitHub
 
 ```bash
-pip install git+https://github.com/auraguarddev-debug/aura-guard.git
+pip install git+https://github.com/auraguarddev-debug/auraguard-dev.git
 ```
 
 ### Optional: LangChain adapter

@@ -31,9 +31,9 @@ dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
 aura-guard = "aura_guard.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/auraguarddev-debug/aura-guard"
-Documentation = "https://github.com/auraguarddev-debug/aura-guard/tree/main/docs"
-Issues = "https://github.com/auraguarddev-debug/aura-guard/issues"
+Homepage = "https://github.com/auraguarddev-debug/auraguard-dev"
+Documentation = "https://github.com/auraguarddev-debug/auraguard-dev/tree/main/docs"
+Issues = "https://github.com/auraguarddev-debug/auraguard-dev/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
