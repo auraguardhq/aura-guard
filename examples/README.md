@@ -59,3 +59,19 @@ python examples/real_agent_test.py --model gpt-4o-mini --max-turns 20
 ```
 
 Tip: you can also set `OPENAI_MODEL` instead of passing `--model`.
+
+## 5) Ollama/local-model loop demo (no API key)
+
+**ollama_agent_loop.py**  
+Shows a minimal Ollama-style agent loop with mock tool-call responses and Aura Guard's 3-method API:
+- `check_tool(...)` before tool execution
+- `record_result(...)` after tool execution
+- `check_output(...)` on assistant text
+
+The demo intentionally jitters search queries and then repeats stall text so you can see Aura Guard rewrite/stop the loop.
+
+Run:
+
+```bash
+python examples/ollama_agent_loop.py
+```
