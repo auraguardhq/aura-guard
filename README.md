@@ -50,13 +50,10 @@ Before a tool runs, Aura Guard answers:
 
 This is the fastest way to “feel” what Aura Guard does.
 
-### Option A (recommended for first-time users): run from a clone
+### Option A (recommended for first-time users): install directly from GitHub
 
 ```bash
-git clone https://github.com/auraguarddev-debug/aura-guard.git
-cd aura-guard
-
-pip install -e .
+pip install git+https://github.com/auraguarddev-debug/aura-guard.git
 aura-guard demo
 ```
 
@@ -79,7 +76,17 @@ You should see output like:
   Rewrites issued:            6
 ```
 
-### Option B: run the full synthetic benchmark suite
+### Option B (for contributors/devs): run from a clone
+
+```bash
+git clone https://github.com/auraguarddev-debug/aura-guard.git
+cd aura-guard
+
+pip install -e .
+aura-guard demo
+```
+
+### Optional: run the full synthetic benchmark suite
 
 ```bash
 aura-guard bench --all
@@ -105,24 +112,24 @@ Aura Guard keeps run-scoped state and makes deterministic decisions from it:
 
 ## Install
 
-### If you are installing from a cloned repo
-
-```bash
-pip install -e .
-```
-
-### If you want to install directly from GitHub
+### Option A (recommended): install directly from GitHub
 
 ```bash
 pip install git+https://github.com/auraguarddev-debug/aura-guard.git
+```
+
+### Option B (for contributors/devs): install from a cloned repo
+
+```bash
+git clone https://github.com/auraguarddev-debug/aura-guard.git
+cd aura-guard
+pip install -e .
 ```
 
 ### Optional: LangChain adapter
 
 ```bash
 pip install langchain-core
-# or if published to PyPI later:
-# pip install aura-guard[langchain]
 ```
 
 ---
