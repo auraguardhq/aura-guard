@@ -53,7 +53,7 @@ This is the fastest way to “feel” what Aura Guard does.
 ### Option A (recommended for first-time users): install directly from GitHub
 
 ```bash
-pip install git+https://github.com/auraguarddev-debug/aura-guard.git
+pip install git+https://github.com/auraguardhq/aura-guard.git
 aura-guard demo
 ```
 
@@ -79,7 +79,7 @@ You should see output like:
 ### Option B (for contributors/devs): run from a clone
 
 ```bash
-git clone https://github.com/auraguarddev-debug/aura-guard.git
+git clone https://github.com/auraguardhq/aura-guard.git
 cd aura-guard
 
 pip install -e .
@@ -115,13 +115,13 @@ Aura Guard keeps run-scoped state and makes deterministic decisions from it:
 ### Option A (recommended): install directly from GitHub
 
 ```bash
-pip install git+https://github.com/auraguarddev-debug/aura-guard.git
+pip install git+https://github.com/auraguardhq/aura-guard.git
 ```
 
 ### Option B (for contributors/devs): install from a cloned repo
 
 ```bash
-git clone https://github.com/auraguarddev-debug/aura-guard.git
+git clone https://github.com/auraguardhq/aura-guard.git
 cd aura-guard
 pip install -e .
 ```
