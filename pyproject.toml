@@ -42,6 +42,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
+"aura_guard" = ["py.typed"]
 "aura_guard.bench" = ["scenarios/*.json"]
 
 [tool.pytest.ini_options]
