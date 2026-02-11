@@ -50,10 +50,10 @@ Before a tool runs, Aura Guard answers:
 
 This is the fastest way to “feel” what Aura Guard does.
 
-### Option A (recommended for first-time users): install directly from GitHub
+### Option A (recommended for first-time users): install from PyPI
 
 ```bash
-pip install git+https://github.com/auraguardhq/aura-guard.git
+pip install aura-guard
 aura-guard demo
 ```
 
@@ -76,7 +76,7 @@ You should see output like:
   Rewrites issued:            6
 ```
 
-### Option B (for contributors/devs): run from a clone
+### Option B (from source / dev): run from a clone
 
 ```bash
 git clone https://github.com/auraguardhq/aura-guard.git
@@ -112,13 +112,14 @@ Aura Guard keeps run-scoped state and makes deterministic decisions from it:
 
 ## Install
 
-### Option A (recommended): install directly from GitHub
+### Option A (recommended):
 
 ```bash
-pip install git+https://github.com/auraguardhq/aura-guard.git
+pip install aura-guard
+aura-guard demo
 ```
 
-### Option B (for contributors/devs): install from a cloned repo
+### Option B (from source / dev): install from a cloned repo
 
 ```bash
 git clone https://github.com/auraguardhq/aura-guard.git
