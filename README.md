@@ -53,27 +53,13 @@ pip install langchain-core
 
 ---
 
-## Benchmarks
-
-Run the full synthetic benchmark suite:
+### Benchmarks (synthetic)
 
 ```bash
 aura-guard bench --all
 ```
 
-Run one scenario:
-
-```bash
-aura-guard bench --scenario <ID>
-```
-
-Save JSON output:
-
-```bash
-aura-guard bench --all --json-out reports/bench.json
-```
-
-Note: benchmark costs are estimated; the most important signal is the **relative difference** under the same config.
+These simulate common agent failure modes (tool loops, retry storms, duplicate side-effects). Costs are estimated — the important signal is the relative difference. See `docs/EVALUATION_PLAN.md` for real-model evaluation.
 
 ---
 
@@ -249,40 +235,6 @@ guard.record_tokens(
 
 ---
 
-## Live A/B (real model) — optional
-
-If you want “real model behavior” (not just the synthetic benchmark), run the live A/B harness.
-
-### Anthropic example
-
-```bash
-pip install anthropic
-export ANTHROPIC_API_KEY=...
-python examples/live_test.py --ab --runs 5 --json-out ab.json
-```
-
-This produces a JSON report (recommended: commit it under `reports/`).
-
-**Tip:** Prefer **reproducible commands + JSON artifacts** over screenshots.  
-See `docs/RESULTS.md` and `reports/README.md`.
-
-<details>
-<summary><b>Example A/B snapshot (table)</b></summary>
-
-Example numbers (5 runs per scenario):
-
-| Scenario | No Guard (avg) | Aura Guard (avg) | Saved (avg) |
-|---|---:|---:|---:|
-| A: Jitter Loop (reformulation trap) | $0.2778 | $0.1447 | $0.1331 |
-| B: Double Refund (ambiguous response trap) | $0.1396 | $0.1275 | $0.0120 |
-| C: Error Retry Spiral | $0.1345 | $0.0952 | $0.0393 |
-| D: Smart Reformulation (cap enforcement) | $0.8093 | $0.1464 | $0.6629 |
-| E: Flagship — Guard + Good Answer | $0.3497 | $0.1420 | $0.2077 |
-
-</details>
-
----
-
 ## Configuration (the knobs that matter)
 
 Most teams start here:
@@ -360,6 +312,7 @@ For architecture details, see docs/ARCHITECTURE.md.
 
 - `docs/ARCHITECTURE.md` — how the engine is structured
 - `docs/EVALUATION_PLAN.md` — how to evaluate credibly
+- `docs/LIVE_AB_EXAMPLE.md` — live A/B walkthrough and sample output
 - `docs/RESULTS.md` — how to publish results (recommended format)
 
 ---
