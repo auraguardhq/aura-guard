@@ -37,6 +37,11 @@ from .types import PolicyAction, PolicyDecision, ToolCall, ToolResult
 class AgentGuard:
     """Simplified guard wrapper for custom agent loops.
 
+    WARNING: AgentGuard holds per-run state and is NOT thread-safe.
+    Do not share a single AgentGuard instance across threads, async tasks,
+    or concurrent requests. Create one AgentGuard per agent run.
+    For web servers, create a new instance per request.
+
     Wraps AuraGuard into three methods:
     - check_tool()     → call before each tool execution
     - record_result()  → call after each tool execution

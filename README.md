@@ -39,6 +39,7 @@ Before a tool runs, Aura Guard answers:
 - [Non-goals & limitations](#non-goals--limitations)
 - [Security & privacy](#security--privacy)
 - [Shadow mode](#shadow-mode-evaluate-before-enforcing)
+- [Thread Safety](#thread-safety)
 - [Async support](#async-support)
 - [Quick integration examples](#quick-integration-examples)
 - [Docs](#docs)
@@ -372,6 +373,35 @@ print(guard.stats["shadow_would_deny"])  # number of would-have-been denials
 When you’re confident in the false-positive rate, remove `shadow_mode=True` to activate enforcement.
 
 ---
+
+## Thread Safety
+
+`AgentGuard` and `AsyncAgentGuard` are **stateful per run** and are **not thread-safe**.
+Do not share one guard instance across threads, async tasks, or concurrent requests.
+
+✅ Correct pattern for web servers (create a new guard inside each request handler):
+
+```python
+from fastapi import FastAPI
+from aura_guard import AsyncAgentGuard, PolicyAction
+
+app = FastAPI()
+
+
+@app.post("/run")
+async def run_agent(payload: dict):
+    guard = AsyncAgentGuard(max_cost_per_run=0.50)  # create per request
+
+    decision = await guard.check_tool("search_kb", args={"query": payload.get("q", "")})
+    if decision.action != PolicyAction.ALLOW:
+        return {"status": "stopped", "reason": decision.reason}
+
+    # ... run tool/model loop, calling guard methods as needed ...
+    return {"status": "ok"}
+```
+
+🚫 Avoid module-level singleton guards in web apps (shared across requests).
+
 
 ## Async support
 
