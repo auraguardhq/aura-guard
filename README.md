@@ -27,6 +27,19 @@ Aura Guard sits between your agent and its tools. Before each tool call, it retu
 
 Python 3.10+ · Zero dependencies · Apache-2.0
 
+## Table of contents
+
+- [Install](#install)
+- [The problem](#the-problem)
+- [Integration](#integration)
+- [Configuration](#configuration-the-knobs-that-matter)
+- [Shadow mode](#shadow-mode-evaluate-before-enforcing)
+- [Thread Safety](#thread-safety)
+- [Async support](#async-support)
+- [Status & limitations](#status--limitations)
+- [Docs](#docs)
+- [License](#license)
+
 ## Install
 
 ### Option A (recommended):
