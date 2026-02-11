@@ -47,3 +47,44 @@ The JSON artifact is committed in:
 ### Scenario E — Flagship
 
 ![Scenario E output](assets/scenario_e.png)
+
+## Results Analysis
+
+### Cost reduction
+
+| Scenario | No Guard | With Guard | Saved | Saved % |
+|----------|----------|------------|-------|---------|
+| A: Jitter Loop | $0.2778 | $0.1447 | $0.1331 | 48% |
+| B: Double Refund | $0.1396 | $0.1275 | $0.0120 | 9% |
+| C: Error Retry Spiral | $0.1345 | $0.0952 | $0.0393 | 29% |
+| D: Smart Reformulation | $0.8093 | $0.1464 | $0.6629 | 82% |
+| E: Flagship | $0.3497 | $0.1420 | $0.2077 | 59% |
+
+### Task completion (quality)
+
+| Scenario | No Guard | With Guard | Notes |
+|----------|----------|------------|-------|
+| A: Jitter Loop | N/A | N/A | No ground-truth answer (KB intentionally vague) |
+| B: Double Refund | 100% | 100% | Guard prevented duplicate, task still completed |
+| C: Error Retry | 40% | 80% | Guard stopped retry storm, escalated cleanly |
+| D: Smart Reformulation | 67% | 80% | Guard capped search, forced resolution |
+| E: Flagship | 100% | 100% | Full task completion with fewer calls |
+
+### Guard interventions
+
+Total: 64 across 25 runs (all with-guard runs triggered at least one intervention).
+
+Breakdown by type:
+- max_calls_per_tool: [count from JSON]
+- idempotency_ledger: [count from JSON]
+- error_retry circuit breaker: [count from JSON]
+
+### False positive analysis
+
+[LEAVE THIS AS A PLACEHOLDER - the repo owner will fill in manually]
+
+"Of the 64 guard interventions across 25 runs, [X] were reviewed manually.
+[Y] were true positives (correctly prevented loops or duplicate side-effects).
+[Z] were false positives. False positive rate: [Z/64]%."
+
+These results use rigged tool implementations designed to trigger known failure modes. They demonstrate that the guard catches real model behavior, but are not equivalent to production traffic evaluation. See EVALUATION_PLAN.md Phase 2-3 for production evaluation methodology.
