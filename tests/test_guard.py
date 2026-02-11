@@ -400,6 +400,66 @@ class TestSerialization:
         assert restored.run_id == state.run_id
 
 
+class TestSerializationFidelity:
+    def test_state_roundtrip_preserves_decision_behavior(self):
+        from aura_guard.serialization import state_from_json, state_to_json
+
+        cfg = AuraGuardConfig(
+            cost_model=CostModel(default_tool_call_cost=0.01),
+            max_cost_per_run=None,
+            side_effect_tools={"refund"},
+            side_effect_max_executed_per_run=1,
+            repeat_toolcall_threshold=2,
+            error_retry_threshold=2,
+        )
+        guard = AuraGuard(config=cfg)
+        original_state = guard.new_state(run_id="serialization-fidelity")
+
+        def run_sequence(sequence, state):
+            decisions = []
+            for call, result in sequence:
+                decision = guard.on_tool_call_request(state=state, call=call)
+                decisions.append(decision)
+                if decision.action == PolicyAction.ALLOW and result is not None:
+                    guard.on_tool_result(state=state, call=call, result=result)
+            return decisions
+
+        initial_sequence = [
+            (ToolCall(name="get_order", args={"order_id": "o1"}), ToolResult(ok=True, payload="order:o1:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o1"}), ToolResult(ok=True, payload="order:o1:v2")),
+            (ToolCall(name="get_order", args={"order_id": "o1"}), None),
+            (ToolCall(name="refund", args={"order_id": "o1", "amount": 10}, ticket_id="t1"), ToolResult(ok=True, payload="refunded:o1")),
+            (ToolCall(name="refund", args={"order_id": "o1", "amount": 10}, ticket_id="t1"), None),
+            (ToolCall(name="refund", args={"order_id": "o2", "amount": 20}, ticket_id="t2"), None),
+            (ToolCall(name="flaky_api", args={"req": "a"}), ToolResult(ok=False, error_code="429")),
+            (ToolCall(name="flaky_api", args={"req": "b"}), ToolResult(ok=False, error_code="429")),
+            (ToolCall(name="flaky_api", args={"req": "c"}), None),
+            (ToolCall(name="get_order", args={"order_id": "o2"}), ToolResult(ok=True, payload="order:o2:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o2"}), ToolResult(ok=True, payload="order:o2:v2")),
+        ]
+        run_sequence(initial_sequence, original_state)
+
+        restored_state = state_from_json(state_to_json(original_state))
+
+        additional_sequence = [
+            (ToolCall(name="flaky_api", args={"req": "d"}), None),
+            (ToolCall(name="refund", args={"order_id": "o3", "amount": 30}, ticket_id="t3"), None),
+            (ToolCall(name="refund", args={"order_id": "o4", "amount": 40}, ticket_id="t4"), None),
+            (ToolCall(name="get_order", args={"order_id": "o4"}), ToolResult(ok=True, payload="order:o4:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o4"}), None),
+            (ToolCall(name="get_order", args={"order_id": "o5"}), ToolResult(ok=True, payload="order:o5:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o5"}), None),
+        ]
+
+        original_decisions = run_sequence(additional_sequence, original_state)
+        restored_decisions = run_sequence(additional_sequence, restored_state)
+
+        assert len(original_decisions) == len(restored_decisions)
+        for original, restored in zip(original_decisions, restored_decisions):
+            assert original.action == restored.action
+            assert original.reason == restored.reason
+
+
 # ─────────────────────────────────────
 # Telemetry
 # ─────────────────────────────────────
