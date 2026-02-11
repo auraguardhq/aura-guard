@@ -77,21 +77,32 @@ Note: benchmark costs are estimated; the most important signal is the **relative
 
 ---
 
-## What problem does this solve?
+## The problem
+Agent run without guard:
 
-Agents that can call tools are powerful — but they fail in very predictable ways:
+1. search_kb("refund policy")              → 3 results
+2. search_kb("refund policy EU")           → 2 results
+3. search_kb("refund policy EU Germany")   → 2 results
+4. search_kb("refund policy EU Germany 2024") → 1 result
+5. search_kb("refund policy EU returns")   → 2 results
+6. refund(order="ORD-123", amount=50)      → success
+7. refund(order="ORD-123", amount=50)      → success (DUPLICATE!)
+8. search_kb("refund confirmation")        → 1 result
+... 14 tool calls, $0.56, customer refunded twice
 
-- They **repeat the same tool call** (or almost the same call) over and over.
-- They “try different keywords” and **spiral**.
-- They hit an error (429 / timeout) and **retry forever**.
-- They see a tool response like “pending” and **do the side-effect twice**.
-- They produce “sorry, still checking…” text and **stall**.
 
-## Why not just max_steps / retries / idempotency keys?
+## With Aura Guard
+Agent run with guard:
 
-- **`max_steps` is blunt**: it does not distinguish productive steps from runaway loops.
-- **Backoff/retry libraries don’t prevent duplicate side effects**: they retry transport failures, not business-level replay risk.
-- **Idempotency keys help side effects but not loops/cost/quarantine**: they protect write operations, but they do not stop search spirals, repeated failed reads, or stalled agent outputs.
+1. search_kb("refund policy")              → ALLOW → 3 results
+2. search_kb("refund policy EU")           → ALLOW → 2 results
+3. search_kb("refund policy EU Germany")   → ALLOW → 2 results
+4. search_kb("refund policy EU Germany 2024") → REWRITE (jitter loop detected)
+5. refund(order="ORD-123", amount=50)      → ALLOW → success
+6. refund(order="ORD-123", amount=50)      → CACHE (idempotent replay)
+... 4 tool calls executed, $0.16, one refund
+
+max_steps doesn't distinguish productive calls from loops. Retry libraries don't prevent duplicate side-effects. Idempotency keys protect writes but don't stop search spirals or stalled outputs. Aura Guard handles all of these with a single middleware layer.
 
 ---
 
