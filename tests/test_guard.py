@@ -117,6 +117,38 @@ class TestArgumentJitter:
             guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
 
 
+class TestConfigValidation:
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"repeat_toolcall_threshold": 0}, "repeat_toolcall_threshold must be >= 1"),
+            (
+                {"arg_jitter_similarity_threshold": -0.1},
+                "arg_jitter_similarity_threshold must be between 0.0 and 1.0",
+            ),
+            ({"arg_jitter_similarity_threshold": 1.1}, "arg_jitter_similarity_threshold must be between 0.0 and 1.0"),
+            ({"arg_jitter_repeat_threshold": 0}, "arg_jitter_repeat_threshold must be >= 1"),
+            ({"error_retry_threshold": 0}, "error_retry_threshold must be >= 1"),
+            ({"side_effect_max_executed_per_run": 0}, "side_effect_max_executed_per_run must be >= 1"),
+            ({"no_state_change_threshold": 0}, "no_state_change_threshold must be >= 1"),
+            ({"stall_text_similarity_threshold": -0.1}, "stall_text_similarity_threshold must be between 0.0 and 1.0"),
+            ({"stall_text_similarity_threshold": 1.1}, "stall_text_similarity_threshold must be between 0.0 and 1.0"),
+            ({"stall_pattern_threshold": -0.1}, "stall_pattern_threshold must be between 0.0 and 1.0"),
+            ({"stall_pattern_threshold": 1.1}, "stall_pattern_threshold must be between 0.0 and 1.0"),
+            ({"max_cost_per_run": 0.0}, "max_cost_per_run must be > 0 when provided"),
+            ({"max_cost_per_run": -1.0}, "max_cost_per_run must be > 0 when provided"),
+            ({"cost_warning_threshold": -0.1}, "cost_warning_threshold must be between 0.0 and 1.0"),
+            ({"cost_warning_threshold": 1.1}, "cost_warning_threshold must be between 0.0 and 1.0"),
+            ({"max_cache_entries": 0}, "max_cache_entries must be >= 1"),
+            ({"max_unique_calls_tracked": 0}, "max_unique_calls_tracked must be >= 1"),
+            ({"tool_loop_window": 0}, "tool_loop_window must be >= 1"),
+        ],
+    )
+    def test_rejects_invalid_thresholds(self, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            AuraGuardConfig(**kwargs)
+
+
 # ─────────────────────────────────────
 # Primitive 3: Error retry circuit breaker
 # ─────────────────────────────────────

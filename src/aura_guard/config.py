@@ -188,6 +188,34 @@ class AuraGuardConfig:
     # It will still compute token signatures for similarity.
     redact_text_in_state: bool = True
 
+    def __post_init__(self) -> None:
+        if self.repeat_toolcall_threshold < 1:
+            raise ValueError("repeat_toolcall_threshold must be >= 1")
+        if not 0.0 <= self.arg_jitter_similarity_threshold <= 1.0:
+            raise ValueError("arg_jitter_similarity_threshold must be between 0.0 and 1.0")
+        if self.arg_jitter_repeat_threshold < 1:
+            raise ValueError("arg_jitter_repeat_threshold must be >= 1")
+        if self.error_retry_threshold < 1:
+            raise ValueError("error_retry_threshold must be >= 1")
+        if self.side_effect_max_executed_per_run < 1:
+            raise ValueError("side_effect_max_executed_per_run must be >= 1")
+        if self.no_state_change_threshold < 1:
+            raise ValueError("no_state_change_threshold must be >= 1")
+        if not 0.0 <= self.stall_text_similarity_threshold <= 1.0:
+            raise ValueError("stall_text_similarity_threshold must be between 0.0 and 1.0")
+        if not 0.0 <= self.stall_pattern_threshold <= 1.0:
+            raise ValueError("stall_pattern_threshold must be between 0.0 and 1.0")
+        if self.max_cost_per_run is not None and self.max_cost_per_run <= 0:
+            raise ValueError("max_cost_per_run must be > 0 when provided")
+        if not 0.0 <= self.cost_warning_threshold <= 1.0:
+            raise ValueError("cost_warning_threshold must be between 0.0 and 1.0")
+        if self.max_cache_entries < 1:
+            raise ValueError("max_cache_entries must be >= 1")
+        if self.max_unique_calls_tracked < 1:
+            raise ValueError("max_unique_calls_tracked must be >= 1")
+        if self.tool_loop_window < 1:
+            raise ValueError("tool_loop_window must be >= 1")
+
     # --------------------------------
     # Helper methods
     # --------------------------------
