@@ -89,6 +89,8 @@ Aura Guard keeps run-scoped state and makes deterministic decisions from it:
 - side-effect replay risk (idempotency protection)
 - output stall signals and run cost
 
+> Aura Guard provides at-most-once enforcement for side-effect tools within a single process run. It does not provide exactly-once semantics across process restarts — for that, persist state via the serialization API and integrate with your own transaction log.
+
 ---
 
 ## Install

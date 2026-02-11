@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aura-guard"
 version = "0.3.2"
-description = "Exactly-once + circuit breaker for agent tool calls (loops, retries, duplicate side effects)."
+description = "At-most-once side-effect enforcement + circuit breaker for agent tool calls (loops, retries, duplicate side effects)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [
   { name = "Aura Guard Contributors" }
 ]
-keywords = ["agents", "agent-runtime", "idempotency", "exactly-once", "circuit-breaker", "reliability", "tool-calling", "tool-execution", "retry", "dedupe"]
+keywords = ["agents", "agent-runtime", "idempotency", "at-most-once", "circuit-breaker", "reliability", "tool-calling", "tool-execution", "retry", "dedupe"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: Apache Software License",
