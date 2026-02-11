@@ -35,6 +35,11 @@ from .types import PolicyAction, PolicyDecision
 class AsyncAgentGuard:
     """Async wrapper around AgentGuard for use in async agent loops.
 
+    WARNING: AsyncAgentGuard holds per-run state and is NOT thread-safe.
+    Do not share a single AsyncAgentGuard instance across threads, async tasks,
+    or concurrent requests. Create one AsyncAgentGuard per agent run.
+    For web servers, create a new instance per request.
+
     Provides the same 3-method API as AgentGuard but with async/await syntax.
     All guard operations are non-blocking (pure CPU, sub-millisecond), so they
     run directly on the event loop without thread offloading.
