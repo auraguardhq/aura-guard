@@ -795,6 +795,9 @@ class AuraGuard:
     def on_llm_output(self, *, state: GuardState, text: str) -> Optional[PolicyDecision]:
         """Inspect an assistant output to detect stall/no-state-change."""
 
+        if text is None or text == "":
+            return None
+
         # If we previously asked for a forced outcome, try to parse it.
         if state.stall_rewrite_attempts > 0:
             parsed = self._parse_forced_outcome(text)

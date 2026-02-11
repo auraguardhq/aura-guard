@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict
+from uuid import uuid4
 
 from .guard import GuardState
 from .types import CostEvent, ToolCallSig
@@ -118,7 +119,14 @@ def state_from_json(data: str) -> GuardState:
     """
     obj = json.loads(data)
 
-    state = GuardState(run_id=obj["run_id"])
+    version = obj.get("version")
+    if version is None or version < 4:
+        raise ValueError(
+            f"Incompatible state format: expected version >= 4, got {version!r}."
+        )
+
+    run_id = obj.get("run_id") or uuid4().hex
+    state = GuardState(run_id=run_id)
 
     # Tool stream
     state.tool_stream = [

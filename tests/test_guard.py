@@ -194,6 +194,10 @@ class TestStallDetection:
             d = guard.on_llm_output(state=state, text=t)
             assert d is None
 
+    def test_on_llm_output_returns_none_for_empty_text(self, guard, state):
+        assert guard.on_llm_output(state=state, text="") is None
+        assert guard.on_llm_output(state=state, text=None) is None
+
     def test_detects_stall_on_repeated_text(self, guard, state):
         text = "I apologize for the inconvenience. We're looking into it."
         decisions = []
@@ -327,6 +331,27 @@ class TestSerialization:
         assert restored.run_id == state.run_id
         assert restored.cumulative_cost == state.cumulative_cost
         assert len(restored.tool_stream) == len(state.tool_stream)
+
+    def test_state_from_json_generates_run_id_when_missing(self):
+        from aura_guard.serialization import state_from_json
+
+        payload = {
+            "version": 4,
+            "tool_stream": [],
+        }
+
+        restored = state_from_json(json.dumps(payload))
+        assert isinstance(restored.run_id, str)
+        assert len(restored.run_id) == 32
+
+    def test_state_from_json_rejects_missing_or_old_version(self):
+        from aura_guard.serialization import state_from_json
+
+        with pytest.raises(ValueError, match="Incompatible state format"):
+            state_from_json(json.dumps({"run_id": "abc123"}))
+
+        with pytest.raises(ValueError, match="Incompatible state format"):
+            state_from_json(json.dumps({"version": 3, "run_id": "abc123"}))
 
     def test_dict_roundtrip(self, guard, state):
         from aura_guard.serialization import state_to_dict, state_from_dict
