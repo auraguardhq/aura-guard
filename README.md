@@ -74,6 +74,22 @@ aura-guard bench --all
 
 These simulate common agent failure modes (tool loops, retry storms, duplicate side-effects). Costs are estimated — the important signal is the relative difference. See `docs/EVALUATION_PLAN.md` for real-model evaluation.
 
+### Real-model evaluation
+
+Tested with Claude Sonnet 4 (`claude-sonnet-4-20250514`), 5 scenarios × 5 runs per variant, real LLM tool-use calls with rigged tool implementations.
+
+| Scenario | No Guard | With Guard | Saved |
+|----------|----------|------------|-------|
+| A: Jitter Loop | $0.2778 | $0.1447 | 48% |
+| B: Double Refund | $0.1396 | $0.1275 | 9% |
+| C: Error Retry Spiral | $0.1345 | $0.0952 | 29% |
+| D: Smart Reformulation | $0.8093 | $0.1464 | 82% |
+| E: Flagship | $0.3497 | $0.1420 | 59% |
+
+64 guard interventions across 25 runs. 0 false positives. Task completion maintained or improved in all scenarios.
+
+Full results, per-run data, and screenshots: [docs/LIVE_AB_EXAMPLE.md](docs/LIVE_AB_EXAMPLE.md) | [JSON report](reports/2026-02-09_claude-sonnet-4_ab.json)
+
 ---
 
 ## The problem
