@@ -28,6 +28,7 @@ Before a tool runs, Aura Guard answers:
 - [30-second demo (no API key)](#30-second-demo-no-api-key)
 - [How it works (1 minute explanation)](#how-it-works-1-minute-explanation)
 - [Install](#install)
+- [Benchmarks](#benchmarks)
 - [What problem does this solve](#what-problem-does-this-solve)
 - [Why not just max_steps / retries / idempotency keys?](#why-not-just-max_steps--retries--idempotency-keys)
 - [2-minute integration (copy/paste)](#2-minute-integration-copypaste)
@@ -49,8 +50,6 @@ Before a tool runs, Aura Guard answers:
 ## 30-second demo (no API key)
 
 This is the fastest way to “feel” what Aura Guard does.
-
-### Option A (recommended for first-time users): install from PyPI
 
 ```bash
 pip install aura-guard
@@ -76,25 +75,7 @@ You should see output like:
   Rewrites issued:            6
 ```
 
-### Option B (from source / dev): run from a clone
-
-```bash
-git clone https://github.com/auraguardhq/aura-guard.git
-cd aura-guard
-
-pip install -e .
-aura-guard demo
-```
-
-### Optional: run the full synthetic benchmark suite
-
-```bash
-aura-guard bench --all
-```
-
-This prints a report showing cost deltas across multiple failure scenarios (looping, retries, side-effects, etc.).
-
-> Note: the benchmark uses estimated USD costs based on the configuration. The most important signal is the **relative difference** under the same config.
+For source installs and benchmarks, see Install and Benchmarks below.
 
 ---
 
@@ -116,7 +97,6 @@ Aura Guard keeps run-scoped state and makes deterministic decisions from it:
 
 ```bash
 pip install aura-guard
-aura-guard demo
 ```
 
 ### Option B (from source / dev): install from a cloned repo
@@ -132,6 +112,30 @@ pip install -e .
 ```bash
 pip install langchain-core
 ```
+
+---
+
+## Benchmarks
+
+Run the full synthetic benchmark suite:
+
+```bash
+aura-guard bench --all
+```
+
+Run one scenario:
+
+```bash
+aura-guard bench --scenario <ID>
+```
+
+Save JSON output:
+
+```bash
+aura-guard bench --all --json-out reports/bench.json
+```
+
+Note: benchmark costs are estimated; the most important signal is the **relative difference** under the same config.
 
 ---
 
@@ -294,11 +298,7 @@ handler = AuraCallbackHandler(max_cost_per_run=1.00)
 # pass handler in your callbacks=[handler]
 ```
 
-Install requirement:
-
-```bash
-pip install langchain-core
-```
+Install: `pip install langchain-core` (see Install section).
 
 ---
 
