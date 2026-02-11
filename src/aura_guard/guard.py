@@ -1,6 +1,6 @@
 """aura_guard.guard
 
-Aura Guard: cost governance and loop prevention for AI agents.
+Aura Guard: reliability middleware and runtime enforcement for tool-using agents.
 
 Design goals:
 - Framework-agnostic: integrates via on_tool_call_request/on_tool_result/on_llm_output.

@@ -59,7 +59,7 @@ def cmd_version(args: argparse.Namespace) -> None:
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(
         prog="aura-guard",
-        description="Aura Guard — Cost governance for AI agents",
+        description="Aura Guard — reliability middleware for tool-using agents (idempotency, circuit breaking, loop detection).",
     )
     subparsers = parser.add_subparsers(dest="command")
 

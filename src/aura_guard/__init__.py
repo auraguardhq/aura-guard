@@ -1,4 +1,4 @@
-"""Aura Guard — Cost governance and loop prevention for AI agents.
+"""Aura Guard — Reliability middleware for tool-using agents: idempotency, circuit breaking, and loop detection.
 
 Quick start:
     from aura_guard import AgentGuard
@@ -21,7 +21,7 @@ from .telemetry import (
 )
 from .types import CostEvent, PolicyAction, PolicyDecision, ToolCall, ToolCallSig, ToolResult
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     # High-level API

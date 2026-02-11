@@ -2,13 +2,13 @@
 
 ## What this is (in one sentence)
 
-Aura Guard is a small, deterministic “policy engine” that watches an agent’s tool calls and stops common failure modes like **tool loops**, **retry storms**, and **duplicate side-effects**.
+Aura Guard is a small, deterministic reliability middleware layer that watches an agent’s tool calls and stops common failure modes like **tool loops**, **retry storms**, and **duplicate side-effects**.
 
 ## Origin
 
-Aura Guard started as an internal reliability layer during agent testing. In red-team style runs, the biggest repeated failure mode was **tool-call governance**: agents looping on search, retrying failing tools forever, or repeating side-effect tools (refund twice, email twice, cancel twice).
+Aura Guard started as an internal reliability layer during agent testing. In red-team style runs, the biggest repeated failure mode was **tool-call runtime enforcement**: agents looping on search, retrying failing tools forever, or repeating side-effect tools (refund twice, email twice, cancel twice).
 
-This repo extracts those guardrails into a focused, standalone SDK.
+This repo extracts those controls into a focused, standalone SDK.
 
 ## Design Principles
 
