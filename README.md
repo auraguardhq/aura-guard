@@ -106,7 +106,7 @@ max_steps doesn't distinguish productive calls from loops. Retry libraries don't
 
 ---
 
-## 2-minute integration (copy/paste)
+## Integration
 
 Aura Guard does **not** call your LLM and does **not** execute tools.  
 You keep your agent loop. You just add 3 hook calls:
@@ -152,6 +152,89 @@ def run_tool(tool_name: str, args: dict):
     # BLOCK / ESCALATE / FINALIZE
     raise RuntimeError(f"Stopped: {decision.action.value} — {decision.reason}")
 ```
+
+Framework-specific adapters for OpenAI and LangChain are included. See examples/ for integration patterns.
+
+<details>
+<summary>Framework examples (Anthropic, OpenAI, LangChain)</summary>
+
+### Anthropic (Claude)
+
+```python
+import anthropic
+from aura_guard import AgentGuard, PolicyAction
+
+client = anthropic.Anthropic()
+guard = AgentGuard(max_cost_per_run=1.00, side_effect_tools={"refund", "send_email"})
+
+# In your agent loop, after the model returns tool_use blocks:
+for block in response.content:
+    if block.type == "tool_use":
+        decision = guard.check_tool(block.name, args=block.input)
+
+        if decision.action == PolicyAction.ALLOW:
+            result = execute_tool(block.name, block.input)
+            guard.record_result(ok=True, payload=result)
+        elif decision.action == PolicyAction.CACHE:
+            result = decision.cached_result.payload  # reuse previous result
+        else:
+            # BLOCK / REWRITE / ESCALATE — handle accordingly
+            break
+
+# After each assistant text response:
+guard.check_output(assistant_text)
+
+# Track real token spend:
+guard.record_tokens(
+    input_tokens=response.usage.input_tokens,
+    output_tokens=response.usage.output_tokens,
+)
+```
+
+### OpenAI
+
+```python
+from aura_guard import AgentGuard, PolicyAction
+from aura_guard.adapters.openai_adapter import (
+    extract_tool_calls_from_chat_completion,
+    inject_system_message,
+)
+
+guard = AgentGuard(max_cost_per_run=1.00)
+
+# After each OpenAI response:
+tool_calls = extract_tool_calls_from_chat_completion(response)
+for call in tool_calls:
+    decision = guard.check_tool(call.name, args=call.args)
+
+    if decision.action == PolicyAction.ALLOW:
+        result = execute_tool(call.name, call.args)
+        guard.record_result(ok=True, payload=result)
+    elif decision.action == PolicyAction.REWRITE:
+        messages = inject_system_message(messages, decision.injected_system)
+        # Re-call the model with updated messages
+```
+
+### LangChain
+
+```python
+from aura_guard.adapters.langchain_adapter import AuraCallbackHandler
+
+handler = AuraCallbackHandler(
+    max_cost_per_run=1.00,
+    side_effect_tools={"refund", "send_email"},
+)
+
+# Pass as a callback — Aura Guard intercepts tool calls automatically:
+agent = initialize_agent(tools=tools, llm=llm, callbacks=[handler])
+agent.run("Process refund for order ORD-123")
+
+# After the run:
+print(handler.summary)
+# {"cost_spent_usd": 0.12, "cost_saved_usd": 0.40, "blocks": 3, ...}
+```
+
+</details>
 
 ### Recommended: record real token usage (more accurate costs)
 
@@ -236,21 +319,6 @@ guard = AgentGuard(
 
 ---
 
-## LangChain (optional)
-
-Aura Guard includes a small LangChain callback adapter.
-
-```python
-from aura_guard.adapters.langchain_adapter import AuraCallbackHandler
-
-handler = AuraCallbackHandler(max_cost_per_run=1.00)
-# pass handler in your callbacks=[handler]
-```
-
-Install: `pip install langchain-core` (see Install section).
-
----
-
 ## Telemetry & persistence (optional)
 
 ### Telemetry
@@ -294,159 +362,12 @@ Aura Guard’s state management uses **HMAC-SHA256 signatures exclusively**. Raw
 
 This means:
 - Guard state can be safely written to Redis, Postgres, or log aggregators without leaking customer data.
-- Telemetry events contain tool names, reason codes, and cost counters — never raw input or output.
-- If your application handles EU personal data, Aura Guard is **GDPR-friendly by design**: no personal data in the guard’s own persistence layer.
-
-> **Note:** Your tool *executors* still handle raw data — Aura Guard’s privacy guarantee covers only the guard’s own state and telemetry, not your application’s tool implementations.
-
----
-
-## Shadow mode (evaluate before enforcing)
-
-Run Aura Guard in **shadow mode** to see what it *would* block without actually blocking anything. Use this to measure false-positive rates before turning on enforcement in production.
-
-```python
-guard = AgentGuard(
-    max_cost_per_run=0.50,
-    shadow_mode=True,  # log decisions, don't enforce
-)
-
-# Your agent loop runs normally — all tools execute.
-# After the run, check what the guard would have done:
-print(guard.stats["shadow_would_deny"])  # number of would-have-been denials
-```
-
-When you’re confident in the false-positive rate, remove `shadow_mode=True` to activate enforcement.
-
----
-
-## Thread Safety
-
-`AgentGuard` and `AsyncAgentGuard` are **stateful per run** and are **not thread-safe**.
-Do not share one guard instance across threads, async tasks, or concurrent requests.
-
-✅ Correct pattern for web servers (create a new guard inside each request handler):
-
-```python
-from fastapi import FastAPI
-from aura_guard import AsyncAgentGuard, PolicyAction
-
-app = FastAPI()
-
-
-@app.post("/run")
-async def run_agent(payload: dict):
-    guard = AsyncAgentGuard(max_cost_per_run=0.50)  # create per request
-
-    decision = await guard.check_tool("search_kb", args={"query": payload.get("q", "")})
-    if decision.action != PolicyAction.ALLOW:
-        return {"status": "stopped", "reason": decision.reason}
-
-    # ... run tool/model loop, calling guard methods as needed ...
-    return {"status": "ok"}
-```
-
-🚫 Avoid module-level singleton guards in web apps (shared across requests).
-
-
-## Async support
-
-For async agent loops (FastAPI, LangGraph, etc.), use `AsyncAgentGuard`:
-
-```python
-from aura_guard import AsyncAgentGuard, PolicyAction
-
-guard = AsyncAgentGuard(max_cost_per_run=0.50)
-
-decision = await guard.check_tool("search_kb", args={"query": "test"})
-if decision.action == PolicyAction.ALLOW:
-    result = await execute_tool(...)
-    await guard.record_result(ok=True, payload=result)
-
-stall = await guard.check_output(assistant_text)
+- Telemetry events contain tool names, reason codes, and cost counters — never raw inpt guard.check_output(assistant_text)
 ```
 
 The async wrapper calls the same deterministic engine (no I/O, sub-millisecond) — safe to run directly on the event loop.
 
 ---
-
-## Quick integration examples
-
-### Anthropic (Claude)
-
-```python
-import anthropic
-from aura_guard import AgentGuard, PolicyAction
-
-client = anthropic.Anthropic()
-guard = AgentGuard(max_cost_per_run=1.00, side_effect_tools={"refund", "send_email"})
-
-# In your agent loop, after the model returns tool_use blocks:
-for block in response.content:
-    if block.type == "tool_use":
-        decision = guard.check_tool(block.name, args=block.input)
-
-        if decision.action == PolicyAction.ALLOW:
-            result = execute_tool(block.name, block.input)
-            guard.record_result(ok=True, payload=result)
-        elif decision.action == PolicyAction.CACHE:
-            result = decision.cached_result.payload  # reuse previous result
-        else:
-            # BLOCK / REWRITE / ESCALATE — handle accordingly
-            break
-
-# After each assistant text response:
-guard.check_output(assistant_text)
-
-# Track real token spend:
-guard.record_tokens(
-    input_tokens=response.usage.input_tokens,
-    output_tokens=response.usage.output_tokens,
-)
-```
-
-### OpenAI
-
-```python
-from aura_guard import AgentGuard, PolicyAction
-from aura_guard.adapters.openai_adapter import (
-    extract_tool_calls_from_chat_completion,
-    inject_system_message,
-)
-
-guard = AgentGuard(max_cost_per_run=1.00)
-
-# After each OpenAI response:
-tool_calls = extract_tool_calls_from_chat_completion(response)
-for call in tool_calls:
-    decision = guard.check_tool(call.name, args=call.args)
-
-    if decision.action == PolicyAction.ALLOW:
-        result = execute_tool(call.name, call.args)
-        guard.record_result(ok=True, payload=result)
-    elif decision.action == PolicyAction.REWRITE:
-        messages = inject_system_message(messages, decision.injected_system)
-        # Re-call the model with updated messages
-```
-
-### LangChain
-
-```python
-from aura_guard.adapters.langchain_adapter import AuraCallbackHandler
-
-handler = AuraCallbackHandler(
-    max_cost_per_run=1.00,
-    side_effect_tools={"refund", "send_email"},
-)
-
-# Pass as a callback — Aura Guard intercepts tool calls automatically:
-agent = initialize_agent(tools=tools, llm=llm, callbacks=[handler])
-agent.run("Process refund for order ORD-123")
-
-# After the run:
-print(handler.summary)
-# {"cost_spent_usd": 0.12, "cost_saved_usd": 0.40, "blocks": 3, ...}
-```
 
 ---
 
