@@ -1,98 +1,31 @@
 # Aura Guard
+Reliability middleware for tool-using AI agents. Prevents tool loops, duplicate side-effects, and retry storms.
 
-Stop AI agents from **looping on tools** and accidentally doing the same action twice (double refunds, duplicate emails, endless retries).
+```python
+from aura_guard import AgentGuard, PolicyAction
 
-Aura Guard is **reliability middleware for tool-using agents**. It sits **between your agent and its tools** (search, refund, get_order, send_email, etc.) and focuses on three controls: **idempotency, circuit breaking, and loop detection**.  
-Before a tool runs, Aura Guard answers:
+guard = AgentGuard(
+    side_effect_tools={"refund", "cancel"},
+    max_calls_per_tool=3,
+    max_cost_per_run=1.00,
+)
 
-- ✅ **ALLOW** → run the tool  
-- ♻️ **CACHE** → reuse the last result (don’t call the tool again)  
-- ⛔ **BLOCK** → stop a risky / repetitive call  
-- ✍️ **REWRITE** → tell the model “stop looping, do this instead”  
-- 🧑‍💼 **ESCALATE / FINALIZE** → stop the run safely  
+decision = guard.check_tool("search_kb", args={"query": "refund policy"})
 
-**Core goals**
-- Prevent duplicate side-effects (refund twice, email twice, cancel twice)
-- Contain retry storms (429 / timeouts / 5xx)
-- Detect loops early and stop runaways
-- Provide deterministic, inspectable decisions
-
-✅ Python 3.10+  
-✅ Dependency‑free core (optional LangChain adapter)  
-✅ Framework‑agnostic (works with your custom loop)
-
----
-
-## Table of contents
-
-- [30-second demo (no API key)](#30-second-demo-no-api-key)
-- [How it works (1 minute explanation)](#how-it-works-1-minute-explanation)
-- [Install](#install)
-- [Benchmarks](#benchmarks)
-- [What problem does this solve](#what-problem-does-this-solve)
-- [Why not just max_steps / retries / idempotency keys?](#why-not-just-max_steps--retries--idempotency-keys)
-- [2-minute integration (copy/paste)](#2-minute-integration-copypaste)
-- [Live A/B (real model) — optional](#live-ab-real-model--optional)
-- [Configuration (the knobs that matter)](#configuration-the-knobs-that-matter)
-- [LangChain (optional)](#langchain-optional)
-- [Telemetry & persistence (optional)](#telemetry--persistence-optional)
-- [Non-goals & limitations](#non-goals--limitations)
-- [Security & privacy](#security--privacy)
-- [Shadow mode](#shadow-mode-evaluate-before-enforcing)
-- [Thread Safety](#thread-safety)
-- [Async support](#async-support)
-- [Quick integration examples](#quick-integration-examples)
-- [Docs](#docs)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## 30-second demo (no API key)
-
-This is the fastest way to “feel” what Aura Guard does.
-
-```bash
-pip install aura-guard
-aura-guard demo
+if decision.action == PolicyAction.ALLOW:
+    result = execute_tool(...)
+    guard.record_result(ok=True, payload=result)
+elif decision.action == PolicyAction.CACHE:
+    result = decision.cached_result.payload
+elif decision.action == PolicyAction.REWRITE:
+    inject_into_prompt(decision.injected_system)
+else:
+    stop_agent(decision.reason)
 ```
 
-You should see output like:
+Aura Guard sits between your agent and its tools. Before each tool call, it returns a deterministic decision: ALLOW, CACHE, BLOCK, REWRITE, or ESCALATE. No LLM calls, no network requests, sub-millisecond overhead.
 
-```text
-================================================================
-  Aura Guard — Triage Simulation Demo
-================================================================
-  Assumed tool-call cost: $0.04 per call
-
-  Variant                   Calls  SideFX  Blocks   Cache     Cost  Terminated
-  ────────────────────────────────────────────────────────────────────────
-  no_guard                     11       3       0       0    $0.44  -
-  call_limit(5)                 5       3       0       0    $0.20  call_limit
-  aura_guard                    4       1       0       2    $0.16  escalate
-
-  Cost saved vs no_guard:     $0.28 (64%)
-  Side-effects prevented:     2
-  Rewrites issued:            6
-```
-
-For source installs and benchmarks, see Install and Benchmarks below.
-
----
-
-## How it works (1 minute explanation)
-
-![How Aura Guard sits between your agent loop and tools](docs/assets/how-it-works.png)
-
-Aura Guard keeps run-scoped state and makes deterministic decisions from it:
-- repeated/near-repeated calls (loop detection)
-- repeated tool errors (circuit breaker behavior)
-- side-effect replay risk (idempotency protection)
-- output stall signals and run cost
-
-> Aura Guard provides at-most-once enforcement for side-effect tools within a single process run. It does not provide exactly-once semantics across process restarts — for that, persist state via the serialization API and integrate with your own transaction log.
-
----
+Python 3.10+ · Zero dependencies · Apache-2.0
 
 ## Install
 
@@ -101,6 +34,8 @@ Aura Guard keeps run-scoped state and makes deterministic decisions from it:
 ```bash
 pip install aura-guard
 ```
+
+Try the built-in demo: `aura-guard demo`
 
 ### Option B (from source / dev): install from a cloned repo
 
