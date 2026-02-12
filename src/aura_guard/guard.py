@@ -756,7 +756,7 @@ class AuraGuard:
             if result.ok:
                 state.idempotency_ledger[key] = result
 
-            if result.side_effect_executed:
+            if result.side_effect_executed and not result.cached:
                 state.executed_side_effect_calls[tool] = (
                     state.executed_side_effect_calls.get(tool, 0) + 1
                 )

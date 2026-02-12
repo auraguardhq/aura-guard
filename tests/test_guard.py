@@ -210,6 +210,30 @@ class TestSideEffectGating:
         assert d2.action == PolicyAction.BLOCK
         assert "side_effect_limit" in d2.reason
 
+    def test_cached_idempotent_replay_does_not_increment_executed_count(self):
+        cfg = AuraGuardConfig(
+            side_effect_tools={"refund"},
+            side_effect_max_executed_per_run=2,
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state(run_id="test-run")
+
+        first_call = ToolCall(name="refund", args={"order": 123}, ticket_id="t1")
+        first_decision = guard.on_tool_call_request(state=state, call=first_call)
+        assert first_decision.action == PolicyAction.ALLOW
+        guard.on_tool_result(state=state, call=first_call, result=ToolResult(ok=True, payload="refunded-123"))
+
+        replay_decision = guard.on_tool_call_request(state=state, call=first_call)
+        assert replay_decision.action == PolicyAction.CACHE
+        assert replay_decision.cached_result is not None
+        guard.on_tool_result(state=state, call=first_call, result=replay_decision.cached_result)
+
+        assert state.executed_side_effect_calls["refund"] == 1
+
+        second_call = ToolCall(name="refund", args={"order": 456}, ticket_id="t2")
+        second_decision = guard.on_tool_call_request(state=state, call=second_call)
+        assert second_decision.action == PolicyAction.ALLOW
+
 
 # ─────────────────────────────────────
 # Primitive 5: Stall detection
