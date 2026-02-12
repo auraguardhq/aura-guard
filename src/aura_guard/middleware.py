@@ -33,6 +33,10 @@ from .guard import AuraGuard, GuardState
 from .telemetry import Telemetry
 from .types import PolicyAction, PolicyDecision, ToolCall, ToolResult
 
+import logging
+
+logger = logging.getLogger("aura_guard")
+
 
 class AgentGuard:
     """Simplified guard wrapper for custom agent loops.
@@ -129,6 +133,14 @@ class AgentGuard:
         - "escalate" → stop the agent run, use decision.escalation_packet
         - "finalize" → stop the agent run, use decision.finalized_output
         """
+        if self._last_call is not None:
+            logger.warning(
+                "check_tool() called without a preceding record_result() for tool '%s'. "
+                "The previous result will not be recorded. This may cause the guard to "
+                "undercount tool calls.",
+                self._last_call.name,
+            )
+
         call = ToolCall(
             name=name,
             args=args or {},
