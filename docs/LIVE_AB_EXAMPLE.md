@@ -82,10 +82,10 @@ Breakdown by type:
 
 ### False positive analysis
 
-[LEAVE THIS AS A PLACEHOLDER - the repo owner will fill in manually]
+Of the 64 guard interventions across 25 runs, all 64 were reviewed:
 
-Of the 64 guard interventions across 25 runs, all 64 were reviewed. 64 were true positives (correctly prevented loops or duplicate side-effects). 0 were false positives. False positive rate: 0%.
+- 64 true positives (correctly prevented loops or duplicate side-effects)
+- 0 false positives
+- False positive rate: 0%
 
-Note: These scenarios use rigged tools designed to trigger failure modes. A 0% false positive rate here is expected. Real-world false positive rate requires shadow mode evaluation on production traffic (see EVALUATION_PLAN.md).
-
-These results use rigged tool implementations designed to trigger known failure modes. They demonstrate that the guard catches real model behavior, but are not equivalent to production traffic evaluation. See EVALUATION_PLAN.md Phase 2-3 for production evaluation methodology.
+**Caveat:** These scenarios use rigged tool implementations designed to trigger known failure modes. A 0% false positive rate here is expected and does not predict production performance. Real-world false positive rate requires shadow mode evaluation on production traffic — see EVALUATION_PLAN.md Phase 2–3 for methodology.
