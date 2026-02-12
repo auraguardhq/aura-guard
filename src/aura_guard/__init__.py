@@ -21,7 +21,7 @@ from .telemetry import (
 )
 from .types import CostEvent, PolicyAction, PolicyDecision, ToolCall, ToolCallSig, ToolResult
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__ = [
     # High-level API
