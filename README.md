@@ -27,6 +27,25 @@ Aura Guard sits between your agent and its tools. Before each tool call, it retu
 
 Python 3.10+ · Zero dependencies · Apache-2.0
 
+
+## Demo
+
+### Without Aura Guard
+Two agents (Coordinator + Analyst) told to consult each other. No termination condition. The loop runs forever.
+
+https://github.com/auraguardhq/aura-guard/raw/main/demo-without-guard.mp4
+
+60 rounds. 79,525 tokens. $0.16 in 3.6 minutes. Never stops on its own.
+
+Extrapolated: $2.68/hour → $706 over 11 days → $5,650 at GPT-4o pricing.
+
+### With Aura Guard
+Same agents. Same prompts. Same task. Guard detects the loop automatically.
+
+https://github.com/auraguardhq/aura-guard/raw/main/demo-with-guard.mp4
+
+7 rounds. 8,540 tokens. $0.017. Caught by identical_toolcall_loop_cache.
+
 ## Table of contents
 
 - [Install](#install)
