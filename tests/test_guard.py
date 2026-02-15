@@ -387,6 +387,41 @@ class TestAgentGuard:
         assert g.cost_remaining is not None
         assert g.cost_remaining < 0.50
 
+    def test_check_tool_without_record_result_strict_mode_raises(self):
+        g = AgentGuard(secret_key=b"test-secret-key", strict_mode=True)
+        d = g.check_tool("search_kb", args={"query": "one"})
+        assert d.action == PolicyAction.ALLOW
+
+        with pytest.raises(RuntimeError, match="without a preceding record_result"):
+            g.check_tool("search_kb", args={"query": "two"})
+
+    def test_check_tool_without_record_result_warns_and_increments_counter(self, caplog):
+        g = AgentGuard(secret_key=b"test-secret-key", strict_mode=False)
+        d = g.check_tool("search_kb", args={"query": "one"})
+        assert d.action == PolicyAction.ALLOW
+
+        with caplog.at_level("WARNING", logger="aura_guard"):
+            g.check_tool("search_kb", args={"query": "two"})
+
+        assert "without a preceding record_result" in caplog.text
+        assert g.missed_results == 1
+        assert g.stats["missed_results"] == 1
+
+    @pytest.mark.parametrize("strict_mode", [False, True])
+    def test_normal_flow_works_in_both_modes(self, strict_mode):
+        g = AgentGuard(secret_key=b"test-secret-key", strict_mode=strict_mode)
+
+        d1 = g.check_tool("search_kb", args={"query": "one"})
+        assert d1.action == PolicyAction.ALLOW
+        g.record_result(ok=True, payload="ok")
+
+        d2 = g.check_tool("search_kb", args={"query": "two"})
+        assert d2.action == PolicyAction.ALLOW
+        g.record_result(ok=True, payload="ok2")
+
+        assert g.tool_calls_executed == 2
+        assert g.missed_results == 0
+
 
 # ─────────────────────────────────────
 # Serialization
