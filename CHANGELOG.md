@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.3.4 — 2026-02-15
+
+### Security & Reliability (P1 fixes)
+
+- Default secret_key now raises ValueError in production mode (shadow_mode=False). Set a unique key for production use.
+- Added strict_mode to AgentGuard. When enabled, raises RuntimeError if record_result() is skipped between check_tool() calls. Tracks missed_results count in stats.
+- Added thread safety assertion. AgentGuard now detects cross-thread usage and raises RuntimeError with clear guidance.
+
+### Docs
+
+- Added Shadow Mode section to README (was missing despite being in table of contents).
+- Added blog post demo scripts to /examples (Demo 1: ping-pong loop, Demo 2: retry storm).
+
 - License changed from MIT to Apache-2.0.
 
 ## 0.3.1 — 2026-02-08
