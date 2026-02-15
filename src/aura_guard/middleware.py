@@ -74,6 +74,7 @@ class AgentGuard:
         telemetry: Optional[Telemetry] = None,
         config: Optional[AuraGuardConfig] = None,
         shadow_mode: bool = False,
+        strict_mode: bool = False,
     ):
         if config is not None:
             self._cfg = config
@@ -98,6 +99,7 @@ class AgentGuard:
             self._cfg = AuraGuardConfig(**kwargs)
 
         self._shadow = self._cfg.shadow_mode
+        self._strict_mode = strict_mode
         self._guard = AuraGuard(config=self._cfg, telemetry=telemetry)
         self._state = self._guard.new_state()
         self._last_call: Optional[ToolCall] = None
@@ -111,6 +113,7 @@ class AgentGuard:
         self.tool_calls_failed: int = 0    # executed but returned error
         self.tool_calls_denied: int = 0    # guard prevented execution (block + cache + rewrite + escalate)
         self.shadow_would_deny: int = 0    # shadow mode: would have denied but allowed
+        self.missed_results: int = 0       # check_tool called before prior ALLOW had record_result
 
     # ─────────────────────────────────────────
     # 3-Method API
@@ -134,12 +137,19 @@ class AgentGuard:
         - "finalize" → stop the agent run, use decision.finalized_output
         """
         if self._last_call is not None:
+            if self._strict_mode:
+                raise RuntimeError(
+                    "check_tool() called without a preceding record_result() for "
+                    f"tool '{self._last_call.name}'."
+                )
+
             logger.warning(
                 "check_tool() called without a preceding record_result() for tool '%s'. "
                 "The previous result will not be recorded. This may cause the guard to "
                 "undercount tool calls.",
                 self._last_call.name,
             )
+            self.missed_results += 1
 
         call = ToolCall(
             name=name,
@@ -306,6 +316,7 @@ class AgentGuard:
             "stall_streak": self._state.stall_streak,
             "shadow_mode": self._shadow,
             "shadow_would_deny": self.shadow_would_deny,
+            "missed_results": self.missed_results,
         }
 
     @property
@@ -325,3 +336,4 @@ class AgentGuard:
         self.tool_calls_failed = 0
         self.tool_calls_denied = 0
         self.shadow_would_deny = 0
+        self.missed_results = 0

@@ -295,6 +295,54 @@ def _():
     assert g.cost_remaining is not None
     assert g.cost_remaining < 0.50
 
+@test("strict_mode raises when record_result is skipped")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key", strict_mode=True)
+    d = g.check_tool("search_kb", args={"query": "one"})
+    assert d.action == PolicyAction.ALLOW
+    try:
+        g.check_tool("search_kb", args={"query": "two"})
+        assert False, "Expected RuntimeError"
+    except RuntimeError as e:
+        assert "without a preceding record_result" in str(e)
+
+@test("non-strict mode warns and increments missed_results")
+def _():
+    import logging
+    g = AgentGuard(secret_key=b"test-secret-key", strict_mode=False)
+    d = g.check_tool("search_kb", args={"query": "one"})
+    assert d.action == PolicyAction.ALLOW
+
+    records = []
+    class _H(logging.Handler):
+        def emit(self, record):
+            records.append(record)
+
+    logger = logging.getLogger("aura_guard")
+    h = _H()
+    logger.addHandler(h)
+    try:
+        g.check_tool("search_kb", args={"query": "two"})
+    finally:
+        logger.removeHandler(h)
+
+    assert any("without a preceding record_result" in r.getMessage() for r in records)
+    assert g.missed_results == 1
+    assert g.stats["missed_results"] == 1
+
+@test("normal check_tool->record_result->check_tool flow works in both strict modes")
+def _():
+    for strict_mode in (False, True):
+        g = AgentGuard(secret_key=b"test-secret-key", strict_mode=strict_mode)
+        d1 = g.check_tool("search_kb", args={"query": "one"})
+        assert d1.action == PolicyAction.ALLOW
+        g.record_result(ok=True)
+        d2 = g.check_tool("search_kb", args={"query": "two"})
+        assert d2.action == PolicyAction.ALLOW
+        g.record_result(ok=True)
+        assert g.tool_calls_executed == 2
+        assert g.missed_results == 0
+
 
 print("\n=== Serialization ===")
 

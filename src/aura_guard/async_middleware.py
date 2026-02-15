@@ -60,6 +60,7 @@ class AsyncAgentGuard:
         telemetry: Optional[Telemetry] = None,
         config: Optional[AuraGuardConfig] = None,
         shadow_mode: bool = False,
+        strict_mode: bool = False,
     ):
         self._sync = AgentGuard(
             max_cost_per_run=max_cost_per_run,
@@ -71,6 +72,7 @@ class AsyncAgentGuard:
             telemetry=telemetry,
             config=config,
             shadow_mode=shadow_mode,
+            strict_mode=strict_mode,
         )
 
     # ─────────────────────────────────────────
@@ -165,6 +167,10 @@ class AsyncAgentGuard:
     @property
     def shadow_would_deny(self) -> int:
         return self._sync.shadow_would_deny
+
+    @property
+    def missed_results(self) -> int:
+        return self._sync.missed_results
 
     @property
     def stats(self) -> Dict[str, Any]:
