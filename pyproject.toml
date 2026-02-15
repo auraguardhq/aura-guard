@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aura-guard"
-version = "0.3.4"
+version = "0.3.5"
 description = "At-most-once side-effect enforcement + circuit breaker for agent tool calls (loops, retries, duplicate side effects)."
 readme = "README.md"
 requires-python = ">=3.10"
