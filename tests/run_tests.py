@@ -40,7 +40,7 @@ from aura_guard.adapters.openai_adapter import (
     inject_system_message,
 )
 
-cfg = AuraGuardConfig(
+cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
     cost_model=CostModel(default_tool_call_cost=0.04),
     max_cost_per_run=1.00,
     side_effect_tools={"refund", "send_reply", "cancel"},
@@ -174,7 +174,7 @@ print("\n=== Primitive 6: Cost Budget ===")
 
 @test("escalates on budget exceeded")
 def _():
-    c = AuraGuardConfig(max_cost_per_run=0.10, cost_model=CostModel(default_tool_call_cost=0.04))
+    c = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_per_run=0.10, cost_model=CostModel(default_tool_call_cost=0.04))
     g = AuraGuard(config=c)
     s = g.new_state()
     for i in range(2):
@@ -189,7 +189,7 @@ def _():
 
 @test("no limit when None")
 def _():
-    c = AuraGuardConfig(max_cost_per_run=None)
+    c = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_per_run=None)
     g = AuraGuard(config=c)
     s = g.new_state()
     for i in range(15):
@@ -202,7 +202,7 @@ def _():
 def _():
     sink = InMemoryTelemetry()
     # Budget $0.50, cost $0.10/call, warning at 50% ($0.25). 3 calls = $0.30 projected on 3rd.
-    c = AuraGuardConfig(max_cost_per_run=0.50, cost_model=CostModel(default_tool_call_cost=0.10), cost_warning_threshold=0.5)
+    c = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_per_run=0.50, cost_model=CostModel(default_tool_call_cost=0.10), cost_warning_threshold=0.5)
     g = AuraGuard(config=c, telemetry=Telemetry(sink=sink))
     s = g.new_state()
     for i in range(4):
@@ -216,7 +216,7 @@ def _():
 
 @test("failed tool calls still incur cost")
 def _():
-    cfg = AuraGuardConfig(max_cost_per_run=1.00)
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_per_run=1.00)
     g = AuraGuard(config=cfg)
     s = g.new_state()
     call = ToolCall(name="get_order", args={"order_id": "o1"})
@@ -239,7 +239,7 @@ def _():
 
 @test("per-tool call cap quarantines after N calls")
 def _():
-    cfg = AuraGuardConfig(max_calls_per_tool=3)
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_calls_per_tool=3)
     g = AuraGuard(config=cfg)
     s = g.new_state()
     # First 3 calls should be allowed
@@ -264,7 +264,7 @@ print("\n=== AgentGuard Middleware ===")
 
 @test("basic flow")
 def _():
-    g = AgentGuard(max_cost_per_run=1.00)
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
     d = g.check_tool("search_kb", args={"query": "test"})
     assert d.action == PolicyAction.ALLOW
     g.record_result(ok=True, payload="results")
@@ -272,7 +272,7 @@ def _():
 
 @test("stats and summary")
 def _():
-    g = AgentGuard(max_cost_per_run=1.00)
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
     g.check_tool("search_kb", args={"query": "test"})
     g.record_result(ok=True)
     s = g.stats
@@ -281,7 +281,7 @@ def _():
 
 @test("reset clears state")
 def _():
-    g = AgentGuard(max_cost_per_run=1.00)
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
     g.check_tool("search_kb", args={"query": "test"})
     g.record_result(ok=True)
     g.reset()
@@ -289,7 +289,7 @@ def _():
 
 @test("cost_remaining tracks correctly")
 def _():
-    g = AgentGuard(max_cost_per_run=0.50, default_tool_cost=0.10)
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=0.50, default_tool_cost=0.10)
     g.check_tool("search_kb", args={"query": "test"})
     g.record_result(ok=True)
     assert g.cost_remaining is not None
@@ -366,7 +366,7 @@ def _():
 
 @test("never_cache_tools prevents caching")
 def _():
-    cfg = AuraGuardConfig(never_cache_tools={"get_time"})
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", never_cache_tools={"get_time"})
     g = AuraGuard(config=cfg)
     s = g.new_state()
     c = ToolCall(name="get_time", args={"tz": "UTC"})
@@ -377,7 +377,7 @@ def _():
 
 @test("arg_ignore_keys strips keys from signature")
 def _():
-    cfg = AuraGuardConfig(
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
         arg_ignore_keys={"search_kb": {"request_id", "timestamp"}},
         repeat_toolcall_threshold=2,
     )
@@ -402,7 +402,7 @@ def _():
 @test("cache_ttl_seconds expires old entries")
 def _():
     import time as _t
-    cfg = AuraGuardConfig(
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
         cache_ttl_seconds=0.05,  # 50ms TTL
         repeat_toolcall_threshold=2,
     )
@@ -429,7 +429,7 @@ def _():
 
 @test("record_tokens adds to cumulative cost")
 def _():
-    cfg = AuraGuardConfig(
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
         cost_model=CostModel(input_token_cost_per_1k=0.003, output_token_cost_per_1k=0.015),
     )
     g = AuraGuard(config=cfg)
@@ -444,7 +444,7 @@ def _():
 
 @test("record_tokens with cost_override")
 def _():
-    g = AuraGuard(config=AuraGuardConfig())
+    g = AuraGuard(config=AuraGuardConfig(secret_key=b"test-secret-key", ))
     s = g.new_state()
     g.record_tokens(state=s, cost_override=0.05)
     assert abs(s.reported_token_cost - 0.05) < 0.0001
@@ -454,7 +454,7 @@ def _():
 @test("middleware record_tokens")
 def _():
     from aura_guard.middleware import AgentGuard
-    guard = AgentGuard(max_cost_per_run=1.00)
+    guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
     guard.record_tokens(input_tokens=2000, output_tokens=1000)
     assert guard.reported_token_cost > 0
     assert guard.cost_spent > 0
@@ -466,7 +466,7 @@ def _():
 
 @test("result_cache bounded by max_cache_entries")
 def _():
-    cfg = AuraGuardConfig(max_cache_entries=3)
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_cache_entries=3)
     g = AuraGuard(config=cfg)
     s = g.new_state()
     for i in range(5):
@@ -478,7 +478,7 @@ def _():
 
 @test("unique_tool_calls_seen bounded")
 def _():
-    cfg = AuraGuardConfig(max_unique_calls_tracked=3)
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_unique_calls_tracked=3)
     g = AuraGuard(config=cfg)
     s = g.new_state()
     for i in range(5):
@@ -495,7 +495,7 @@ def _():
 @test("tool policy DENY blocks tool")
 def _():
     from aura_guard.config import ToolPolicy, ToolAccess
-    cfg = AuraGuardConfig(
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
         tool_policies={"delete_account": ToolPolicy(access=ToolAccess.DENY, deny_reason="forbidden")}
     )
     g = AuraGuard(config=cfg)
@@ -509,7 +509,7 @@ def _():
 @test("tool policy HUMAN_APPROVAL escalates")
 def _():
     from aura_guard.config import ToolPolicy, ToolAccess
-    cfg = AuraGuardConfig(
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
         tool_policies={"refund_large": ToolPolicy(access=ToolAccess.HUMAN_APPROVAL, risk="high")}
     )
     g = AuraGuard(config=cfg)
@@ -523,7 +523,7 @@ def _():
 @test("tool policy require_args blocks when missing")
 def _():
     from aura_guard.config import ToolPolicy, ToolAccess
-    cfg = AuraGuardConfig(
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
         tool_policies={"transfer": ToolPolicy(require_args={"account_id", "amount"})}
     )
     g = AuraGuard(config=cfg)
@@ -537,7 +537,7 @@ def _():
 @test("tool policy per-tool max_calls overrides global")
 def _():
     from aura_guard.config import ToolPolicy
-    cfg = AuraGuardConfig(
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
         max_calls_per_tool=10,  # global
         tool_policies={"search_kb": ToolPolicy(max_calls=2)}  # per-tool override
     )
@@ -556,7 +556,7 @@ def _():
 @test("serialization preserves reported_token_cost")
 def _():
     from aura_guard.serialization import state_to_json, state_from_json
-    g = AuraGuard(config=AuraGuardConfig())
+    g = AuraGuard(config=AuraGuardConfig(secret_key=b"test-secret-key", ))
     s = g.new_state()
     g.record_tokens(state=s, input_tokens=1000, output_tokens=500)
     original_cost = s.reported_token_cost
@@ -574,7 +574,7 @@ print("\n=== Shadow Mode ===")
 
 @test("shadow mode allows everything")
 def _():
-    g = AgentGuard(max_cost_per_run=0.10, shadow_mode=True, default_tool_cost=0.04)
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=0.10, shadow_mode=True, default_tool_cost=0.04)
     for _ in range(5):
         d = g.check_tool("search_kb", args={"query": "test"})
         assert d.action == PolicyAction.ALLOW, f"Shadow mode should ALLOW, got {d.action}"
@@ -585,7 +585,7 @@ def _():
 
 @test("shadow mode stall not enforced")
 def _():
-    g = AgentGuard(shadow_mode=True)
+    g = AgentGuard(secret_key=b"test-secret-key", shadow_mode=True)
     text = "I apologize for the inconvenience. We're looking into it."
     for _ in range(10):
         d = g.check_output(text)
@@ -602,7 +602,7 @@ print("\n=== Async Guard ===")
 @test("async guard import and basic properties")
 def _():
     from aura_guard import AsyncAgentGuard
-    g = AsyncAgentGuard(max_cost_per_run=1.00)
+    g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
     assert g.cost_spent == 0
 
 @test("async guard sync parity")
@@ -610,7 +610,7 @@ def _():
     import asyncio
     from aura_guard import AsyncAgentGuard
     async def _run():
-        g = AsyncAgentGuard(max_cost_per_run=1.00)
+        g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
         d = await g.check_tool("search_kb", args={"query": "test"})
         assert d.action == PolicyAction.ALLOW
         await g.record_result(ok=True, payload="results")
@@ -626,25 +626,23 @@ def _():
 #   Default Key Warning
 # ===========================================
 
-print("\n=== Default Key Warning ===")
+print("\n=== Secret Key Enforcement ===")
 
-@test("warns on default key")
+@test("default key allowed in shadow mode")
 def _():
-    import warnings
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        AuraGuard(config=AuraGuardConfig())
-        key_warnings = [x for x in w if "default development secret_key" in str(x.message)]
-        assert len(key_warnings) >= 1, f"Expected warning, got {len(key_warnings)} warnings"
+    AuraGuard(config=AuraGuardConfig(shadow_mode=True))
 
-@test("no warning on custom key")
+@test("default key rejected in enforcement mode")
 def _():
-    import warnings
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        AuraGuard(config=AuraGuardConfig(secret_key=b"my-production-key-1234"))
-        key_warnings = [x for x in w if "default development secret_key" in str(x.message)]
-        assert len(key_warnings) == 0, f"Expected no warning, got {len(key_warnings)}"
+    try:
+        AuraGuard(config=AuraGuardConfig(shadow_mode=False))
+        raise AssertionError("Expected ValueError")
+    except ValueError as e:
+        assert "default development secret_key" in str(e)
+
+@test("custom key allowed")
+def _():
+    AuraGuard(config=AuraGuardConfig(secret_key=b"my-production-key-1234"))
 
 
 # ─── Report ───

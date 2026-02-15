@@ -31,7 +31,7 @@ from aura_guard.telemetry import InMemoryTelemetry, Telemetry
 
 @pytest.fixture
 def config():
-    return AuraGuardConfig(
+    return AuraGuardConfig(secret_key=b"test-secret-key", 
         cost_model=CostModel(default_tool_call_cost=0.04),
         max_cost_per_run=1.00,
         side_effect_tools={"refund", "send_reply", "cancel"},
@@ -146,7 +146,7 @@ class TestConfigValidation:
     )
     def test_rejects_invalid_thresholds(self, kwargs, message):
         with pytest.raises(ValueError, match=message):
-            AuraGuardConfig(**kwargs)
+            AuraGuardConfig(secret_key=b"test-secret-key", **kwargs)
 
 
 # ─────────────────────────────────────
@@ -211,7 +211,7 @@ class TestSideEffectGating:
         assert "side_effect_limit" in d2.reason
 
     def test_cached_idempotent_replay_does_not_increment_executed_count(self):
-        cfg = AuraGuardConfig(
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
             side_effect_tools={"refund"},
             side_effect_max_executed_per_run=2,
         )
@@ -274,7 +274,7 @@ class TestStallDetection:
 
 class TestCostBudget:
     def test_escalates_on_budget_exceeded(self):
-        cfg = AuraGuardConfig(
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
             max_cost_per_run=0.10,
             cost_model=CostModel(default_tool_call_cost=0.04),
         )
@@ -295,7 +295,7 @@ class TestCostBudget:
         assert "budget" in d3.reason
 
     def test_no_limit_when_none(self):
-        cfg = AuraGuardConfig(max_cost_per_run=None)
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_per_run=None)
         guard = AuraGuard(config=cfg)
         state = guard.new_state()
 
@@ -307,7 +307,7 @@ class TestCostBudget:
 
     def test_budget_warning_emitted(self):
         sink = InMemoryTelemetry()
-        cfg = AuraGuardConfig(
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
             max_cost_per_run=0.20,
             cost_model=CostModel(default_tool_call_cost=0.04),
             cost_warning_threshold=0.8,
@@ -326,7 +326,7 @@ class TestCostBudget:
         assert len(warnings) >= 1
 
     def test_identical_repeat_cache_hit_bypasses_budget_projection(self):
-        cfg = AuraGuardConfig(
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
             max_cost_per_run=0.10,
             cost_model=CostModel(default_tool_call_cost=0.04),
         )
@@ -356,14 +356,14 @@ class TestCostBudget:
 
 class TestAgentGuard:
     def test_basic_flow(self):
-        g = AgentGuard(max_cost_per_run=1.00)
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
         d = g.check_tool("search_kb", args={"query": "test"})
         assert d.action == PolicyAction.ALLOW
         g.record_result(ok=True, payload="results")
         assert g.cost_spent > 0
 
     def test_stats(self):
-        g = AgentGuard(max_cost_per_run=1.00)
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
         g.check_tool("search_kb", args={"query": "test"})
         g.record_result(ok=True)
         stats = g.stats
@@ -372,7 +372,7 @@ class TestAgentGuard:
         assert stats["cost_limit_usd"] == 1.00
 
     def test_reset(self):
-        g = AgentGuard(max_cost_per_run=1.00)
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
         g.check_tool("search_kb", args={"query": "test"})
         g.record_result(ok=True)
         assert g.cost_spent > 0
@@ -381,7 +381,7 @@ class TestAgentGuard:
         assert g.blocks == 0
 
     def test_cost_remaining(self):
-        g = AgentGuard(max_cost_per_run=0.50, default_tool_cost=0.10)
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=0.50, default_tool_cost=0.10)
         g.check_tool("search_kb", args={"query": "test"})
         g.record_result(ok=True)
         assert g.cost_remaining is not None
@@ -452,7 +452,7 @@ class TestSerializationFidelity:
     def test_state_roundtrip_preserves_decision_behavior(self):
         from aura_guard.serialization import state_from_json, state_to_json
 
-        cfg = AuraGuardConfig(
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
             cost_model=CostModel(default_tool_call_cost=0.01),
             max_cost_per_run=None,
             side_effect_tools={"refund"},
@@ -612,7 +612,7 @@ class TestRunSummary:
 
 class TestShadowMode:
     def test_shadow_allows_everything(self):
-        g = AgentGuard(max_cost_per_run=0.10, shadow_mode=True, default_tool_cost=0.04)
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=0.10, shadow_mode=True, default_tool_cost=0.04)
         # Execute 5 identical calls — normally would trigger block/cache
         for _ in range(5):
             d = g.check_tool("search_kb", args={"query": "test"})
@@ -625,7 +625,7 @@ class TestShadowMode:
         assert g.stats["shadow_mode"] is True
 
     def test_shadow_counts_would_deny(self):
-        g = AgentGuard(
+        g = AgentGuard(secret_key=b"test-secret-key", 
             max_cost_per_run=0.50,
             side_effect_tools={"refund"},
             shadow_mode=True,
@@ -641,7 +641,7 @@ class TestShadowMode:
         assert g.shadow_would_deny == 1
 
     def test_shadow_stall_not_enforced(self):
-        g = AgentGuard(shadow_mode=True)
+        g = AgentGuard(secret_key=b"test-secret-key", shadow_mode=True)
         text = "I apologize for the inconvenience. We're looking into it."
         for _ in range(10):
             d = g.check_output(text)
@@ -656,7 +656,7 @@ class TestShadowMode:
 class TestAsyncGuard:
     def test_async_import(self):
         from aura_guard import AsyncAgentGuard
-        g = AsyncAgentGuard(max_cost_per_run=1.00)
+        g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
         assert g.cost_spent == 0
 
     def test_async_sync_parity(self):
@@ -665,7 +665,7 @@ class TestAsyncGuard:
         from aura_guard import AsyncAgentGuard
 
         async def _run():
-            g = AsyncAgentGuard(max_cost_per_run=1.00)
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
             d = await g.check_tool("search_kb", args={"query": "test"})
             assert d.action == PolicyAction.ALLOW
             await g.record_result(ok=True, payload="results")
@@ -679,24 +679,17 @@ class TestAsyncGuard:
 
 
 # ─────────────────────────────────────
-# Default Key Warning
+# Secret key enforcement
 # ─────────────────────────────────────
 
-class TestDefaultKeyWarning:
-    def test_warns_on_default_key(self):
-        import warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            from aura_guard import AuraGuard, AuraGuardConfig
-            AuraGuard(config=AuraGuardConfig())
-            key_warnings = [x for x in w if "default development secret_key" in str(x.message)]
-            assert len(key_warnings) >= 1
+class TestSecretKeyEnforcement:
+    def test_default_key_allowed_in_shadow_mode(self):
+        AuraGuard(config=AuraGuardConfig(shadow_mode=True))
 
-    def test_no_warning_on_custom_key(self):
-        import warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            from aura_guard import AuraGuard, AuraGuardConfig
-            AuraGuard(config=AuraGuardConfig(secret_key=b"my-production-key"))
-            key_warnings = [x for x in w if "default development secret_key" in str(x.message)]
-            assert len(key_warnings) == 0
+    def test_default_key_rejected_in_enforcement_mode(self):
+        with pytest.raises(ValueError, match="default development secret_key"):
+            AuraGuard(config=AuraGuardConfig(shadow_mode=False))
+
+    @pytest.mark.parametrize("shadow_mode", [True, False])
+    def test_custom_key_allowed_in_both_modes(self, shadow_mode):
+        AuraGuard(config=AuraGuardConfig(secret_key=b"my-production-key", shadow_mode=shadow_mode))
