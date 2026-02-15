@@ -5,6 +5,7 @@ Tests for Aura Guard core engine — enforcement primitives and policy layer.
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -421,6 +422,33 @@ class TestAgentGuard:
 
         assert g.tool_calls_executed == 2
         assert g.missed_results == 0
+
+    def test_thread_safety_assert_allows_single_thread_usage(self):
+        g = AgentGuard(secret_key=b"test-secret-key")
+
+        d = g.check_tool("search_kb", args={"query": "single-thread"})
+        assert d.action == PolicyAction.ALLOW
+        g.record_result(ok=True, payload="ok")
+        assert g.check_output("All good") is None
+
+    def test_thread_safety_assert_raises_when_check_tool_called_on_different_thread(self):
+        g = AgentGuard(secret_key=b"test-secret-key")
+        result = {}
+
+        def _call_check_tool():
+            try:
+                g.check_tool("search_kb", args={"query": "cross-thread"})
+            except Exception as exc:  # pragma: no cover - validated below
+                result["error"] = exc
+
+        worker = threading.Thread(target=_call_check_tool)
+        worker.start()
+        worker.join()
+
+        assert isinstance(result.get("error"), RuntimeError)
+        assert str(result["error"]) == (
+            "AgentGuard is not thread-safe. Create one instance per agent run. See docs."
+        )
 
 
 # ─────────────────────────────────────
