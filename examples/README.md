@@ -75,3 +75,27 @@ Run:
 ```bash
 python examples/ollama_agent_loop.py
 ```
+
+## 6) Multi-Agent Ping-Pong Loop (real API calls, costs ~$0.18)
+
+From the blog post "I Spent $0.20 Reproducing the Multi-Agent Loop That Cost Someone $47K".
+
+**run_without_guard.py** - Two Claude agents loop for 60 rounds, $0.16
+**run_with_guard.py** - Same agents, guard catches loop at round 7, $0.017
+```bash
+pip install anthropic aura-guard
+export ANTHROPIC_API_KEY=sk-ant-...
+python examples/run_without_guard.py
+python examples/run_with_guard.py
+```
+
+## 7) Natural Retry Storm (real API calls, costs ~$0.03)
+
+**natural_loop_without_guard.py** - Agent retries failing search 24 times, $0.024
+**natural_loop_with_guard.py** - Guard stops it at 9 searches, $0.006
+```bash
+python examples/natural_loop_without_guard.py
+python examples/natural_loop_with_guard.py
+```
+
+Videos: [Without guard](https://youtu.be/FkBsRK6OS-4) | [With guard](https://youtu.be/6U-YWF-w7wY)
