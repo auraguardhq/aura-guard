@@ -5,6 +5,7 @@ Reliability middleware for tool-using AI agents. Prevents tool loops, duplicate 
 from aura_guard import AgentGuard, PolicyAction
 
 guard = AgentGuard(
+    secret_key=b"your-secret-key",
     side_effect_tools={"refund", "cancel"},
     max_calls_per_tool=3,
     max_cost_per_run=1.00,
@@ -160,6 +161,7 @@ You keep your agent loop. You just add 3 hook calls:
 from aura_guard import AgentGuard, PolicyAction
 
 guard = AgentGuard(
+    secret_key=b"your-secret-key",
     max_calls_per_tool=3,                 # stop “search forever”
     side_effect_tools={"refund", "cancel"},
     max_cost_per_run=1.00,                # optional budget (USD)
@@ -204,7 +206,7 @@ import anthropic
 from aura_guard import AgentGuard, PolicyAction
 
 client = anthropic.Anthropic()
-guard = AgentGuard(max_cost_per_run=1.00, side_effect_tools={"refund", "send_email"})
+guard = AgentGuard(secret_key=b"your-secret-key", max_cost_per_run=1.00, side_effect_tools={"refund", "send_email"})
 
 # In your agent loop, after the model returns tool_use blocks:
 for block in response.content:
@@ -239,7 +241,7 @@ from aura_guard.adapters.openai_adapter import (
     inject_system_message,
 )
 
-guard = AgentGuard(max_cost_per_run=1.00)
+guard = AgentGuard(secret_key=b"your-secret-key", max_cost_per_run=1.00)
 
 # After each OpenAI response:
 tool_calls = extract_tool_calls_from_chat_completion(response)
@@ -342,6 +344,7 @@ When ready, remove `shadow_mode=True` to start enforcing.
 from aura_guard import AgentGuard, AuraGuardConfig, ToolPolicy, ToolAccess
 
 guard = AgentGuard(
+    secret_key=b"your-secret-key",
     config=AuraGuardConfig(
         tool_policies={
             "delete_account": ToolPolicy(access=ToolAccess.DENY, deny_reason="Too risky"),

@@ -10,7 +10,7 @@ Usage with async agent loops:
 
     from aura_guard.async_middleware import AsyncAgentGuard, PolicyAction
 
-    guard = AsyncAgentGuard(max_cost_per_run=0.50)
+    guard = AsyncAgentGuard(secret_key=b"your-secret-key", max_cost_per_run=0.50)
 
     decision = await guard.check_tool("search_kb", args={"query": "test"})
     if decision.action == PolicyAction.ALLOW:

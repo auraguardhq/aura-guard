@@ -31,6 +31,7 @@ MAX_COST = 1.00
 client = anthropic.Anthropic()
 
 guard = AgentGuard(
+    secret_key=b"your-secret-key",
     max_cost_per_run=1.00,
     max_calls_per_tool=8,
     default_tool_cost=0.003,
