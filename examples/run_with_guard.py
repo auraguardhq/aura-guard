@@ -33,6 +33,7 @@ MAX_ROUNDS = 60
 client = anthropic.Anthropic()
 
 guard = AgentGuard(
+    secret_key=b"your-secret-key",
     max_cost_per_run=2.00,
     max_calls_per_tool=15,
     default_tool_cost=0.003,

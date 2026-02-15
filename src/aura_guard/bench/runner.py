@@ -148,6 +148,7 @@ def run_with_guard(
         max_cost_per_run=budget,
         default_tool_cost=tool_cost,
         side_effect_tools={"refund", "send_reply", "cancel"},
+        shadow_mode=True,
     )
 
     calls_executed = 0

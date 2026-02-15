@@ -3,7 +3,7 @@
 Quick start:
     from aura_guard import AgentGuard
 
-    guard = AgentGuard(max_cost_per_run=0.50)
+    guard = AgentGuard(secret_key=b"your-secret-key", max_cost_per_run=0.50)
     decision = guard.check_tool("search_kb", args={"query": "refund policy"})
 """
 
