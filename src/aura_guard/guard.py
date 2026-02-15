@@ -259,10 +259,14 @@ class AuraGuard:
         self.telemetry = telemetry
 
         if self.cfg.secret_key == b"aura-guard-dev-key-CHANGE-ME":
+            if not self.cfg.shadow_mode:
+                raise ValueError(
+                    "AuraGuard default development secret_key is not allowed when "
+                    "shadow_mode=False. Set AuraGuardConfig(secret_key=...) to a unique key."
+                )
             warnings.warn(
-                "AuraGuard is using the default development secret_key. "
-                "HMAC signatures will be predictable. Set a unique secret_key "
-                "in AuraGuardConfig for production use.",
+                "AuraGuard is using the default development secret_key in shadow_mode. "
+                "Set a unique secret_key before enabling enforcement.",
                 stacklevel=2,
             )
 
