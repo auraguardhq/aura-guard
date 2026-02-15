@@ -24,7 +24,7 @@ else:
     stop_agent(decision.reason)
 ```
 
-Aura Guard sits between your agent and its tools. Before each tool call, it returns a deterministic decision: ALLOW, CACHE, BLOCK, REWRITE, or ESCALATE. No LLM calls, no network requests, sub-millisecond overhead.
+Aura Guard sits between your agent and its tools. Before each tool call, it returns a deterministic decision: ALLOW, CACHE, BLOCK, REWRITE, or ESCALATE. No LLM calls, sub-millisecond overhead. Core engine makes no network requests; optional webhook telemetry performs HTTP calls.
 
 Python 3.10+ · Zero dependencies · Apache-2.0
 
@@ -111,7 +111,7 @@ Tested with Claude Sonnet 4 (`claude-sonnet-4-20250514`), 5 scenarios × 5 runs 
 
 > All costs are p50 (median) across 5 runs. Scenario B costs slightly more because the guard adds an intervention turn but prevents the duplicate side-effect (the refund only executes once). In Scenario B guard runs, 2 of 5 completed in fewer turns ($0.10), while 3 of 5 required the extra intervention turn ($0.145).
 
-64 guard interventions across 25 runs. 0 false positives (expected — see caveat below). Task completion maintained or improved in all scenarios.
+64 guard interventions across 25 runs. No false positives observed in manual review (expected — see caveat below). Task completion maintained or improved in all scenarios.
 
 Full results, per-run data, and screenshots: [docs/LIVE_AB_EXAMPLE.md](docs/LIVE_AB_EXAMPLE.md) | [JSON report](reports/2026-02-09_claude-sonnet-4_ab.json)
 
@@ -388,7 +388,7 @@ Aura Guard is v0.3 — the API is stabilizing but may change before v1.0.
 - Side-effect enforcement is at-most-once within a single process. Not exactly-once across restarts.
 - Argument jitter detection uses token overlap, not semantic similarity. English-biased.
 - Cost estimates are configurable approximations, not actual billing data.
-- Guard state stores HMAC signatures only — no raw args or payloads in state or telemetry.
+- Serialized state and telemetry contain HMAC signatures only. In-memory caches hold tool payloads for caching and idempotency during a run.
 
 For architecture details, see docs/ARCHITECTURE.md.
 
