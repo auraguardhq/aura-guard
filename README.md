@@ -306,6 +306,36 @@ Most teams start here:
 
 For advanced options, see `AuraGuardConfig` in `src/aura_guard/config.py`.
 
+## Shadow mode (evaluate before enforcing)
+
+Shadow mode lets you measure what Aura Guard would block without actually blocking anything. Every decision that would be BLOCK, CACHE, REWRITE, or ESCALATE is logged and counted, but the agent receives ALLOW instead.
+
+This lets you evaluate false positive rates before turning enforcement on in production.
+```python
+from aura_guard import AgentGuard
+
+guard = AgentGuard(
+    max_cost_per_run=1.00,
+    max_calls_per_tool=8,
+    shadow_mode=True,
+)
+
+# Agent runs normally — nothing is blocked
+decision = guard.check_tool("search_kb", args={"query": "refund policy"})
+# decision.action is always ALLOW in shadow mode
+
+# After the run, check what would have been blocked:
+print(guard.stats)
+# {"shadow_mode": True, "shadow_would_deny": 3, ...}
+```
+
+Use shadow mode to:
+- Tune thresholds on real traffic before enforcing
+- Compare guard behavior across config changes
+- Build confidence that enforcement won't break working agents
+
+When ready, remove `shadow_mode=True` to start enforcing.
+
 ### Example: per-tool policies (deny / human approval)
 
 ```python
