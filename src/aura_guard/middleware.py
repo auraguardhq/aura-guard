@@ -26,6 +26,7 @@ Usage:
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Dict, List, Optional
 
 from .config import AuraGuardConfig, CostModel
@@ -76,6 +77,8 @@ class AgentGuard:
         shadow_mode: bool = False,
         strict_mode: bool = False,
     ):
+        self._creator_thread = threading.get_ident()
+
         if config is not None:
             self._cfg = config
         else:
@@ -119,6 +122,12 @@ class AgentGuard:
     # 3-Method API
     # ─────────────────────────────────────────
 
+    def _assert_same_thread(self) -> None:
+        if threading.get_ident() != self._creator_thread:
+            raise RuntimeError(
+                "AgentGuard is not thread-safe. Create one instance per agent run. See docs."
+            )
+
     def check_tool(
         self,
         name: str,
@@ -136,6 +145,7 @@ class AgentGuard:
         - "escalate" → stop the agent run, use decision.escalation_packet
         - "finalize" → stop the agent run, use decision.finalized_output
         """
+        self._assert_same_thread()
         if self._last_call is not None:
             if self._strict_mode:
                 raise RuntimeError(
@@ -209,6 +219,7 @@ class AgentGuard:
 
         Call this after executing a tool that was allowed by check_tool().
         """
+        self._assert_same_thread()
         if self._last_call is None:
             return
         result = ToolResult(ok=ok, payload=payload, error_code=error_code)
@@ -224,6 +235,7 @@ class AgentGuard:
         Returns None if no intervention needed, or a PolicyDecision if the
         agent should be rewritten, escalated, or finalized.
         """
+        self._assert_same_thread()
         decision = self._guard.on_llm_output(state=self._state, text=text)
         if decision is not None:
             # Shadow mode: log but don't enforce
