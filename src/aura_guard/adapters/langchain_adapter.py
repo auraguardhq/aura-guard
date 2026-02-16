@@ -173,7 +173,7 @@ class AuraCallbackHandler(BaseCallbackHandler):
             return
 
         # Track cost saved
-        est = self._guard._estimate_tool_cost(tool_name)
+        est = self._guard.estimate_tool_cost(tool_name)
         self._cost_saved += est
 
         if decision.action == PolicyAction.BLOCK:

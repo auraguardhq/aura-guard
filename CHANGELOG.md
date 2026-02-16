@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.3.7
+
+### Fixes
+- **P0:** Synthetic benchmark (`aura-guard bench --all`) now runs in enforcement mode instead of shadow mode — previously showed 0% savings across all scenarios
+- **P1:** Added `side_effect_executed` parameter to `AgentGuard.record_result()` and `AsyncAgentGuard.record_result()` — enables correct handling of "side effect succeeded but call timed out" scenarios
+- **P1:** Clarified quality claim to "scored scenarios (B–E)" — Scenario A was not quality-scored
+
+### Improvements
+- Error retry streaks are now consecutive (reset on success) — prevents quarantining tools with rare intermittent failures
+- Promoted `estimate_tool_cost()` to public API (was `_estimate_tool_cost`)
+- Added version note to LIVE_AB_EXAMPLE.md explaining report was generated on v0.3.1
+
 ## 0.3.6 — 2026-02-16
 
 ### Docs & Accuracy Fixes

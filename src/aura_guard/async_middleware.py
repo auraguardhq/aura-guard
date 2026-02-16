@@ -99,12 +99,13 @@ class AsyncAgentGuard:
         ok: bool = True,
         payload: Any = None,
         error_code: Optional[str] = None,
+        side_effect_executed: Optional[bool] = None,
     ) -> None:
         """Record the result of the most recent tool call (async).
 
         See :meth:`AgentGuard.record_result` for full documentation.
         """
-        self._sync.record_result(ok=ok, payload=payload, error_code=error_code)
+        self._sync.record_result(ok=ok, payload=payload, error_code=error_code, side_effect_executed=side_effect_executed)
 
     async def check_output(self, text: str) -> Optional[PolicyDecision]:
         """Check an assistant's text output for stall/loop behavior (async).

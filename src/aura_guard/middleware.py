@@ -214,6 +214,7 @@ class AgentGuard:
         ok: bool = True,
         payload: Any = None,
         error_code: Optional[str] = None,
+        side_effect_executed: Optional[bool] = None,
     ) -> None:
         """Record the result of the most recent tool call.
 
@@ -222,7 +223,7 @@ class AgentGuard:
         self._assert_same_thread()
         if self._last_call is None:
             return
-        result = ToolResult(ok=ok, payload=payload, error_code=error_code)
+        result = ToolResult(ok=ok, payload=payload, error_code=error_code, side_effect_executed=side_effect_executed)
         self._guard.on_tool_result(state=self._state, call=self._last_call, result=result)
         self._last_call = None
         self.tool_calls_executed += 1
