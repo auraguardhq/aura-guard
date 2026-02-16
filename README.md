@@ -345,8 +345,8 @@ When ready, remove `shadow_mode=True` to start enforcing.
 from aura_guard import AgentGuard, AuraGuardConfig, ToolPolicy, ToolAccess
 
 guard = AgentGuard(
-    secret_key=b"your-secret-key",
     config=AuraGuardConfig(
+        secret_key=b"your-secret-key",
         tool_policies={
             "delete_account": ToolPolicy(access=ToolAccess.DENY, deny_reason="Too risky"),
             "large_refund": ToolPolicy(access=ToolAccess.HUMAN_APPROVAL, risk="high"),
