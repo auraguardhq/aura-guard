@@ -8,6 +8,8 @@ If you prefer fully reproducible artifacts, use the JSON report files in `report
 
 ## The command that produced the report
 
+> **Note:** This report was generated using v0.3.1 of the guard engine. Releases v0.3.2–v0.3.7 contained documentation, packaging, and API ergonomic fixes only — no changes to enforcement logic or thresholds.
+
 ```bash
 pip install anthropic
 export ANTHROPIC_API_KEY=...
@@ -69,6 +71,8 @@ The JSON artifact is committed in:
 | C: Error Retry | 40% | 80% | Guard stopped retry storm, escalated cleanly |
 | D: Smart Reformulation | 67% | 80% | Guard capped search, forced resolution |
 | E: Flagship | 100% | 100% | Full task completion with fewer calls |
+
+Task completion was maintained or improved in scored scenarios (B–E). Scenario A quality was not scored (loop-containment test only).
 
 ### Guard interventions
 

@@ -281,7 +281,7 @@ class AuraGuard:
             fields["run_id"] = state.run_id
         self.telemetry.emit(event, **fields)
 
-    def _estimate_tool_cost(self, tool_name: str) -> float:
+    def estimate_tool_cost(self, tool_name: str) -> float:
         return self.cfg.cost_model.tool_cost(tool_name)
 
     def _cache_valid(self, state: GuardState, cache_key: Tuple[str, str]) -> bool:
@@ -472,7 +472,7 @@ class AuraGuard:
                     cached=True,
                     side_effect_executed=cached.side_effect_executed,
                 )
-                est = self._estimate_tool_cost(tool)
+                est = self.estimate_tool_cost(tool)
                 self._emit(
                     "idempotent_replay_blocked",
                     state=state,
@@ -502,7 +502,7 @@ class AuraGuard:
                     cached=True,
                     side_effect_executed=cached.side_effect_executed,
                 )
-                est = self._estimate_tool_cost(tool)
+                est = self.estimate_tool_cost(tool)
                 self._emit(
                     "tool_call_cache_hit",
                     state=state,
@@ -521,7 +521,7 @@ class AuraGuard:
         # Primitive 6: Cost budget enforcement
         # ──────────────────────────────────────────
         if self.cfg.max_cost_per_run is not None:
-            estimated = self._estimate_tool_cost(tool)
+            estimated = self.estimate_tool_cost(tool)
             projected = state.cumulative_cost + estimated
 
             if round(projected, 8) >= round(self.cfg.max_cost_per_run, 8):
@@ -592,7 +592,7 @@ class AuraGuard:
                 "tool_quarantined_block",
                 state=state,
                 tool=tool, reason=reason, args_sig=args_sig,
-                estimated_cost_avoided=round(self._estimate_tool_cost(tool), 4),
+                estimated_cost_avoided=round(self.estimate_tool_cost(tool), 4),
             )
             return PolicyDecision(
                 action=PolicyAction.REWRITE,
@@ -617,7 +617,7 @@ class AuraGuard:
                     tool=tool, ticket_sig=t_sig, args_sig=args_sig,
                     executed=executed,
                     limit=self.cfg.side_effect_max_executed_per_run,
-                    estimated_cost_avoided=round(self._estimate_tool_cost(tool), 4),
+                    estimated_cost_avoided=round(self.estimate_tool_cost(tool), 4),
                 )
                 return PolicyDecision(
                     action=PolicyAction.BLOCK,
@@ -638,7 +638,7 @@ class AuraGuard:
                 state=state,
                 tool=tool, args_sig=args_sig,
                 repeats=repeats,
-                estimated_cost_avoided=round(self._estimate_tool_cost(tool), 4),
+                estimated_cost_avoided=round(self.estimate_tool_cost(tool), 4),
             )
             return PolicyDecision(
                 action=PolicyAction.BLOCK,
@@ -684,7 +684,7 @@ class AuraGuard:
                     "arg_jitter_loop_quarantine",
                     state=state,
                     tool=tool, args_sig=args_sig, similar=similar,
-                    estimated_cost_avoided=round(self._estimate_tool_cost(tool), 4),
+                    estimated_cost_avoided=round(self.estimate_tool_cost(tool), 4),
                 )
                 return PolicyDecision(
                     action=PolicyAction.REWRITE,
@@ -774,6 +774,12 @@ class AuraGuard:
                     state.executed_side_effect_calls.get(tool, 0) + 1
                 )
 
+        # Reset error streaks on success (streaks must be consecutive)
+        if result.ok:
+            keys_to_reset = [k for k in state.error_streaks if k[0] == tool]
+            for k in keys_to_reset:
+                state.error_streaks[k] = 0
+
         # Primitive 3: Error retry circuit breaker
         if not result.ok:
             err_class = _classify_error_code(result.error_code)
@@ -796,7 +802,7 @@ class AuraGuard:
         # Every executed tool call costs money — failures are NOT free.
         # Only cached results (never sent to the API) are free.
         if not result.cached:
-            est = self._estimate_tool_cost(tool)
+            est = self.estimate_tool_cost(tool)
             state.cumulative_cost += est
             state.cost_events.append(CostEvent(
                 event="cost_incurred", tool=tool,
