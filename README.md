@@ -196,6 +196,18 @@ def run_tool(tool_name: str, args: dict):
 
 Framework-specific adapters for OpenAI and LangChain are included. See examples/ for integration patterns.
 
+### Strict mode (recommended in production)
+
+If `record_result()` is accidentally skipped between `check_tool()` calls, the guard undercounts tool executions and may weaken protections. Enable strict mode to catch this:
+```python
+guard = AgentGuard(
+    secret_key=b"your-secret-key",
+    strict_mode=True,  # raises RuntimeError on integration mistakes
+)
+```
+
+In strict mode, calling `check_tool()` without a preceding `record_result()` raises `RuntimeError`. Calling `record_result()` without a preceding `check_tool()` also raises. In non-strict mode (default), these cases log a warning and increment `stats["missed_results"]`.
+
 <details>
 <summary>Framework examples (Anthropic, OpenAI, LangChain)</summary>
 
@@ -373,6 +385,8 @@ from aura_guard.serialization import state_to_json, state_from_json
 json_str = state_to_json(state)
 state = state_from_json(json_str)
 ```
+
+> ⚠️ `result_cache` and `idempotency_ledger` payloads are excluded from serialization (PII risk). After restoring state, side-effect deduplication relies on `executed_side_effect_calls` counts only — not per-call idempotency keys. If your agent can be interrupted mid-run and resumed from serialized state, a duplicate side-effect is possible on the first call after restore.
 
 ---
 

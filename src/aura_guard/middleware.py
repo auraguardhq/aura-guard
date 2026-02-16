@@ -222,6 +222,12 @@ class AgentGuard:
         """
         self._assert_same_thread()
         if self._last_call is None:
+            if self._strict_mode:
+                raise RuntimeError(
+                    "record_result() called without a preceding check_tool(). "
+                    "In strict_mode, every record_result() must follow a check_tool() "
+                    "that returned ALLOW."
+                )
             return
         result = ToolResult(ok=ok, payload=payload, error_code=error_code, side_effect_executed=side_effect_executed)
         self._guard.on_tool_result(state=self._state, call=self._last_call, result=result)

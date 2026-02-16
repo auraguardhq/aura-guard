@@ -8,7 +8,7 @@ If you prefer fully reproducible artifacts, use the JSON report files in `report
 
 ## The command that produced the report
 
-> **Note:** This report was generated using v0.3.1 of the guard engine. Releases v0.3.2–v0.3.6 were documentation and packaging fixes only. v0.3.7 changed error streak tracking (now resets on success) and added `side_effect_executed` support — neither affects the scenarios measured in this report.
+> **Note:** This report was generated using v0.3.1 of the guard engine. Releases v0.3.2–v0.3.3 and v0.3.5–v0.3.6 were documentation and packaging fixes. v0.3.4 added secret-key enforcement, `strict_mode`, and thread-safety assertions. v0.3.7 changed error streak tracking (now resets on success) and added `side_effect_executed` support. None of these changes affect the scenarios measured in this report.
 
 ```bash
 pip install anthropic

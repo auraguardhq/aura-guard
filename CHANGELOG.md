@@ -2,14 +2,22 @@
 
 ## Unreleased
 
-## 0.3.7
+## 0.3.8 — 2026-02-16
+
+### Fixes
+- **P2:** `record_result()` now raises `RuntimeError` in `strict_mode` when called without a preceding `check_tool()` — previously silently no-oped
+- **P1:** Documented `strict_mode` in README (feature existed since v0.3.4 but was undocumented)
+- **P1:** Fixed LIVE_AB_EXAMPLE.md version note — v0.3.4 included code changes (secret-key enforcement, strict mode), not just docs
+- Added serialization caveat to README — `result_cache` and `idempotency_ledger` are excluded (PII risk)
+
+## 0.3.7 — 2026-02-16
 
 ### Fixes
 - **P0:** Synthetic benchmark (`aura-guard bench --all`) now runs in enforcement mode instead of shadow mode — previously showed 0% savings across all scenarios
+- **P0:** Idempotency ledger now stores results when `side_effect_executed=True` even if `ok=False` — previously allowed duplicate side-effects after timeouts
 - **P1:** Added `side_effect_executed` parameter to `AgentGuard.record_result()` and `AsyncAgentGuard.record_result()` — enables correct handling of "side effect succeeded but call timed out" scenarios
 - **P1:** Clarified quality claim to "scored scenarios (B–E)" — Scenario A was not quality-scored
 
-- **P0:** Idempotency ledger now stores results when `side_effect_executed=True` even if `ok=False` — previously allowed duplicate side-effects after timeouts
 ### Improvements
 - Error retry streaks are now consecutive (reset on success) — prevents quarantining tools with rare intermittent failures
 - Promoted `estimate_tool_cost()` to public API (was `_estimate_tool_cost`)
