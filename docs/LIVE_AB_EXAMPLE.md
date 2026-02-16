@@ -54,11 +54,11 @@ The JSON artifact is committed in:
 
 | Scenario | No Guard | With Guard | Saved | Saved % |
 |----------|----------|------------|-------|---------|
-| A: Jitter Loop | $0.2778 | $0.1447 | $0.1331 | 48% |
-| B: Double Refund | $0.1396 | $0.1275 | $0.0120 | 9% |
-| C: Error Retry Spiral | $0.1345 | $0.0952 | $0.0393 | 29% |
-| D: Smart Reformulation | $0.8093 | $0.1464 | $0.6629 | 82% |
-| E: Flagship | $0.3497 | $0.1420 | $0.2077 | 59% |
+| A: Jitter Loop | $0.2778 | $0.1446 | $0.1332 | 48% |
+| B: Double Refund | $0.1397 | $0.1456 | -$0.0059 | -4% *(prevented duplicate refund)* |
+| C: Error Retry Spiral | $0.1345 | $0.0953 | $0.0392 | 29% |
+| D: Smart Reformulation | $0.8607 | $0.1465 | $0.7142 | 83% |
+| E: Flagship | $0.3494 | $0.1446 | $0.2048 | 59% |
 
 ### Task completion (quality)
 
@@ -85,7 +85,7 @@ Breakdown by type:
 Of the 64 guard interventions across 25 runs, all 64 were reviewed:
 
 - 64 true positives (correctly prevented loops or duplicate side-effects)
-- 0 false positives
+- No false positives observed in manual review
 - False positive rate: 0%
 
 **Caveat:** These scenarios use rigged tool implementations designed to trigger known failure modes. A 0% false positive rate here is expected and does not predict production performance. Real-world false positive rate requires shadow mode evaluation on production traffic — see EVALUATION_PLAN.md Phase 2–3 for methodology.

@@ -62,6 +62,7 @@ def mock_openai_response_text(text: str) -> Dict[str, Any]:
 def main() -> None:
     # Initialize Aura Guard with a cost budget
     guard = AgentGuard(
+        secret_key=b"your-secret-key",
         max_cost_per_run=0.25,
         side_effect_tools={"refund"},
         tool_costs={"search_kb": 0.03, "refund": 0.05},

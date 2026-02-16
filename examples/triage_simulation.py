@@ -132,6 +132,7 @@ def run_call_limit(limit: int = 5) -> RunReport:
 def run_aura_guard() -> RunReport:
     """Run with Aura Guard protection."""
     guard = AgentGuard(
+        secret_key=b"your-secret-key",
         max_cost_per_run=0.50,
         side_effect_tools={"refund", "send_reply", "cancel"},
     )

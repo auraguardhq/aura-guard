@@ -7,7 +7,7 @@ Requires: pip install langchain-core (or pip install aura-guard[langchain])
 Usage:
     from aura_guard.adapters.langchain_adapter import AuraCallbackHandler
 
-    handler = AuraCallbackHandler(max_cost_per_run=1.00)
+    handler = AuraCallbackHandler(secret_key=b"your-secret-key", max_cost_per_run=1.00)
     agent = initialize_agent(tools=tools, llm=llm, callbacks=[handler])
 
     # After the agent runs:
@@ -68,6 +68,7 @@ class AuraCallbackHandler(BaseCallbackHandler):
         tool_costs: Dict mapping tool names to per-call costs (USD).
         default_tool_cost: Default per-call cost.
         side_effect_tools: Set of tool names that perform mutations.
+        secret_key: Optional signing key for AuraGuardConfig.
         config: Optional full AuraGuardConfig (overrides other params).
         telemetry: Optional Telemetry instance.
         raise_on_block: If True (default), raise AuraToolBlocked on non-ALLOW
@@ -84,6 +85,7 @@ class AuraCallbackHandler(BaseCallbackHandler):
         tool_costs: Optional[Dict[str, float]] = None,
         default_tool_cost: float = 0.04,
         side_effect_tools: Optional[Set[str]] = None,
+        secret_key: Optional[bytes] = None,
         config: Optional[AuraGuardConfig] = None,
         telemetry: Optional[Telemetry] = None,
         raise_on_block: bool = True,
@@ -103,6 +105,8 @@ class AuraCallbackHandler(BaseCallbackHandler):
                 kwargs["max_cost_per_run"] = max_cost_per_run
             if side_effect_tools is not None:
                 kwargs["side_effect_tools"] = side_effect_tools
+            if secret_key is not None:
+                kwargs["secret_key"] = secret_key
             cost_model = CostModel(
                 default_tool_call_cost=default_tool_cost,
                 tool_cost_by_name=dict(tool_costs or {}),

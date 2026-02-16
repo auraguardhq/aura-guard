@@ -16,7 +16,7 @@ Usage with AgentGuard:
         inject_system_message,
     )
 
-    guard = AgentGuard(max_cost_per_run=0.50)
+    guard = AgentGuard(secret_key=b"your-secret-key", max_cost_per_run=0.50)
 
     # After getting a response from OpenAI:
     tool_calls = extract_tool_calls_from_chat_completion(response, ticket_id="t1")
