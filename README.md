@@ -262,6 +262,7 @@ for call in tool_calls:
 from aura_guard.adapters.langchain_adapter import AuraCallbackHandler
 
 handler = AuraCallbackHandler(
+    secret_key=b"your-secret-key",
     max_cost_per_run=1.00,
     side_effect_tools={"refund", "send_email"},
 )
@@ -374,6 +375,20 @@ state = state_from_json(json_str)
 ```
 
 ---
+
+## Thread safety
+
+Aura Guard is **not** thread-safe. Each `AgentGuard` instance stores per-run state and must be used from the thread that created it. Sharing a guard across threads will raise `RuntimeError`. Create one guard per agent run.
+
+## Async support
+
+Use `AsyncAgentGuard` for async agent loops. It calls the synchronous engine directly (no I/O, sub-millisecond), safe for the event loop.
+```python
+from aura_guard.async_middleware import AsyncAgentGuard, PolicyAction
+
+guard = AsyncAgentGuard(secret_key=b"your-secret-key", max_cost_per_run=0.50)
+decision = await guard.check_tool("search_kb", args={"query": "test"})
+```
 
 ## Status & limitations
 

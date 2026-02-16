@@ -4,7 +4,7 @@ Async-compatible wrapper for Aura Guard.
 
 Since the guard engine is pure computation (no I/O, sub-millisecond),
 the async methods call the synchronous engine directly on the event loop.
-This is safe because the guard never blocks on network, disk, or locks.
+This is safe because the core engine never blocks on I/O. Note: if you attach WebhookTelemetry, its emit() is synchronous and may block briefly.
 
 Usage with async agent loops:
 

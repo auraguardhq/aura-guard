@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.3.6 — 2026-02-16
+
+### Docs & Accuracy Fixes
+
+- Fixed all code examples to include required `secret_key` parameter (README, docstrings, examples, bench runner).
+- Clarified that "no network requests" applies to core engine only; optional webhook telemetry performs HTTP calls.
+- Updated HMAC claim: serialized state and telemetry use signatures only; in-memory caches hold payloads during a run.
+- Softened "0 false positives" to "No false positives observed in manual review".
+- Fixed LIVE_AB_EXAMPLE.md cost table to match JSON report data.
+- Added Thread Safety and Async Support sections to README.
+- Added secret_key parameter to LangChain AuraCallbackHandler.
+- Fixed async_middleware docstring about blocking behavior.
+
 ## 0.3.4 — 2026-02-15
 
 ### Security & Reliability (P1 fixes)

@@ -72,6 +72,7 @@ def run_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
 def main() -> None:
     guard = AgentGuard(
         config=AuraGuardConfig(
+            secret_key=b"your-secret-key",
             # Lower threshold to make the jitter loop intervention obvious in a tiny demo.
             arg_jitter_repeat_threshold=2,
             max_cost_per_run=1.0,

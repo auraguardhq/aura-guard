@@ -213,6 +213,7 @@ def run_agent(
     if use_guard:
         telemetry_sink = InMemoryTelemetry()
         guard = AgentGuard(
+            secret_key=b"your-secret-key",
             max_cost_per_run=0.50,
             side_effect_tools={"refund"},
             tool_costs={"search_kb": 0.03, "get_order": 0.04, "refund": 0.05},

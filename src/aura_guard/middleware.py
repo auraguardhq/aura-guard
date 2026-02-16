@@ -8,7 +8,7 @@ Reduces the full guard API to: check_tool(), record_result(), check_output().
 Usage:
     from aura_guard import AgentGuard
 
-    guard = AgentGuard(max_cost_per_run=0.50)
+    guard = AgentGuard(secret_key=b"your-secret-key", max_cost_per_run=0.50)
 
     # Before each tool call
     decision = guard.check_tool("search_kb", args={"query": "refund policy"})

@@ -583,6 +583,7 @@ def _run_single(
 
     if use_guard:
         guard = AgentGuard(
+            secret_key=b"your-secret-key",
             max_cost_per_run=0.50,
             **scenario["guard_config"],
         )
@@ -590,6 +591,7 @@ def _run_single(
         # True NullGuard: disable every primitive so baseline is unprotected
         from aura_guard.config import AuraGuardConfig
         guard = AgentGuard(config=AuraGuardConfig(
+            secret_key=b"your-secret-key",
             max_cost_per_run=999.0,
             side_effect_tools=set(),            # no side-effect gating
             error_retry_threshold=999,          # no circuit breaker
