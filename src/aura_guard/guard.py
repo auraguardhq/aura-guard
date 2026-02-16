@@ -766,7 +766,7 @@ class AuraGuard:
         # Side-effect ledger and executed counts
         if side_effect:
             key = (t_sig, tool, args_sig)
-            if result.ok:
+            if result.ok or result.side_effect_executed:
                 state.idempotency_ledger[key] = result
 
             if result.side_effect_executed and not result.cached:

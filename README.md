@@ -398,6 +398,20 @@ Aura Guard is v0.3 — the API is stabilizing but may change before v1.0.
 
 **May change:** Default threshold values, serialization format (versioned — old state will error, not silently corrupt), telemetry event names.
 
+### Side-effect timeouts (important)
+
+If a side-effect tool succeeds server-side but times out locally, tell the guard:
+```python
+try:
+    result = refund_tool(order_id="o1", amount=50)
+    guard.record_result(ok=True, payload=result, side_effect_executed=True)
+except TimeoutError:
+    # Server may have executed the refund — mark it to prevent duplicates
+    guard.record_result(ok=False, error_code="timeout", side_effect_executed=True)
+```
+
+If you don't set `side_effect_executed=True` on timeout, the guard may allow a retry that causes a duplicate side-effect.
+
 **Limitations:**
 - In-memory state only. Not thread-safe. Create one guard per agent run.
 - Side-effect enforcement is at-most-once within a single process. Not exactly-once across restarts.
