@@ -1,4 +1,7 @@
 # Aura Guard
+
+[![Downloads](https://static.pepy.tech/badge/aura-guard)](https://pepy.tech/project/aura-guard)
+
 Reliability middleware for tool-using AI agents. Prevents tool loops, duplicate side-effects, and retry storms.
 
 ```python
