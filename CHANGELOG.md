@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.3.9 — 2026-03-06
+
+### Fixes
+- **P0:** Idempotency ledger keys now survive serialization. Previously, deserializing guard state would lose the idempotency ledger entirely, allowing duplicate side-effects on the first call after restore. Keys (HMAC signatures) and safe metadata are now persisted; raw payloads remain excluded (PII safety). Serialization version bumped to 5 (backward compatible with version 4).
+- **P1:** Clarified `max_calls_per_tool` / `_check_tool_call_cap` documentation — the cap counts *executed* calls (those that pass all prior checks), not *attempted* calls. Calls blocked/cached by earlier primitives don't count toward the cap.
+- **P1:** Added `aura-guard bench --all` to CI workflow — catches regressions in scenario loading, benchmark runner, and report generation.
+- **P2:** Version is now read from package metadata (`importlib.metadata`) instead of being hardcoded in two places. `pyproject.toml` is the single source of truth.
+
 ## 0.3.8 — 2026-02-16
 
 ### Fixes

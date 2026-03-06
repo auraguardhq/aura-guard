@@ -21,7 +21,11 @@ from .telemetry import (
 )
 from .types import CostEvent, PolicyAction, PolicyDecision, ToolCall, ToolCallSig, ToolResult
 
-__version__ = "0.3.8"
+try:
+    from importlib.metadata import version as _get_version
+    __version__ = _get_version("aura-guard")
+except Exception:
+    __version__ = "0.3.9"  # fallback for editable installs / development
 
 __all__ = [
     # High-level API

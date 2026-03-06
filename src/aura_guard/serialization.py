@@ -30,7 +30,7 @@ from typing import Any, Dict
 from uuid import uuid4
 
 from .guard import GuardState
-from .types import CostEvent, ToolCallSig
+from .types import CostEvent, ToolCallSig, ToolResult
 
 
 def state_to_json(state: GuardState) -> str:
@@ -38,10 +38,11 @@ def state_to_json(state: GuardState) -> str:
 
     Excludes result_cache and idempotency_ledger payloads (PII risk).
     Persists only safe data: counts, reason codes, and HMAC-signed token signatures
-    (no raw text, no raw args, no raw payloads).
+    (no raw text, no raw args, no raw payloads). Idempotency ledger keys and
+    safe ToolResult metadata are persisted to preserve replay protection.
     """
     data: Dict[str, Any] = {
-        "version": 4,
+        "version": 5,
         "run_id": state.run_id,
 
         # Tool stream (rolling signature history)
@@ -104,6 +105,20 @@ def state_to_json(state: GuardState) -> str:
             }
             for e in state.cost_events
         ],
+
+        # Idempotency ledger keys + safe metadata (payload excluded)
+        "idempotency_ledger_keys": [
+            {
+                "ticket_sig": key[0],
+                "tool": key[1],
+                "args_sig": key[2],
+                "ok": result.ok,
+                "error_code": result.error_code,
+                "payload_sig": result.payload_sig,
+                "side_effect_executed": result.side_effect_executed,
+            }
+            for key, result in state.idempotency_ledger.items()
+        ],
     }
 
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
@@ -115,7 +130,9 @@ def state_from_json(data: str) -> GuardState:
     Note: result_cache and idempotency_ledger payloads are NOT restored
     (privacy). The guard will naturally rebuild caches from new tool calls.
     HMAC-signed token signatures *are* restored (safe, and improves continuity
-    for jitter/stall detection).
+    for jitter/stall detection). Idempotency ledger keys and safe ToolResult
+    metadata are restored when available (version 5+), while raw payloads remain
+    excluded.
     """
     obj = json.loads(data)
 
@@ -190,6 +207,17 @@ def state_from_json(data: str) -> GuardState:
         )
         for e in obj.get("cost_events", [])
     ]
+
+    for entry in obj.get("idempotency_ledger_keys", []):
+        key = (entry["ticket_sig"], entry["tool"], entry["args_sig"])
+        state.idempotency_ledger[key] = ToolResult(
+            ok=entry.get("ok", True),
+            payload=None,  # Never persist raw payloads
+            error_code=entry.get("error_code"),
+            payload_sig=entry.get("payload_sig"),
+            cached=True,
+            side_effect_executed=entry.get("side_effect_executed"),
+        )
 
     return state
 

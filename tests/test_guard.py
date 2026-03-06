@@ -511,6 +511,57 @@ class TestSerialization:
         assert restored.run_id == state.run_id
 
 
+class TestIdempotencyLedgerSerialization:
+    def test_idempotency_survives_serialization(self):
+        from aura_guard.serialization import state_from_json, state_to_json
+
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", side_effect_tools={"refund"})
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state(run_id="idempotency-serialize")
+
+        call = ToolCall(name="refund", args={"order_id": "o1", "amount": 10}, ticket_id="t1")
+        decision = guard.on_tool_call_request(state=state, call=call)
+        assert decision.action == PolicyAction.ALLOW
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload="refunded"))
+
+        restored = state_from_json(state_to_json(state))
+
+        replay = guard.on_tool_call_request(state=restored, call=call)
+        assert replay.action == PolicyAction.CACHE
+        assert replay.cached_result is not None
+        assert replay.cached_result.payload is None
+
+    def test_idempotency_serialization_backward_compat(self):
+        from aura_guard.serialization import state_from_json
+
+        payload = {
+            "version": 4,
+            "run_id": "compat-v4",
+            "tool_stream": [],
+            "tool_query_sigs": {},
+            "quarantined_tools": {},
+            "error_streaks": {},
+            "attempted_side_effect_calls": {},
+            "executed_side_effect_calls": {},
+            "tool_call_counts": {},
+            "stall_streak": 0,
+            "stall_pattern_streak": 0,
+            "stall_rewrite_attempts": 0,
+            "last_assistant_token_sigs": None,
+            "last_progress_marker": [0, 0],
+            "unique_tool_calls_seen": [],
+            "unique_tool_results_seen": [],
+            "cumulative_cost": 0.0,
+            "reported_token_cost": 0.0,
+            "budget_warning_emitted": False,
+            "cost_events": [],
+        }
+
+        state = state_from_json(json.dumps(payload))
+        assert state.run_id == "compat-v4"
+        assert state.idempotency_ledger == {}
+
+
 class TestSerializationFidelity:
     def test_state_roundtrip_preserves_decision_behavior(self):
         from aura_guard.serialization import state_from_json, state_to_json
