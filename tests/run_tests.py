@@ -1,4 +1,5 @@
 """Run all tests without pytest dependency."""
+import json
 import sys
 import traceback
 from pathlib import Path
@@ -369,6 +370,51 @@ def _():
     d = state_to_dict(s)
     r = state_from_dict(d)
     assert r.run_id == "test-dict"
+
+@test("idempotency ledger survives serialization")
+def _():
+    g = AuraGuard(config=AuraGuardConfig(secret_key=b"test-secret-key", side_effect_tools={"refund"}))
+    s = g.new_state(run_id="ser-idempotency")
+    c = ToolCall(name="refund", args={"order_id": "o1", "amount": 10}, ticket_id="t1")
+
+    d1 = g.on_tool_call_request(state=s, call=c)
+    assert d1.action == PolicyAction.ALLOW
+    g.on_tool_result(state=s, call=c, result=ToolResult(ok=True, payload="refunded"))
+
+    restored = state_from_json(state_to_json(s))
+    d2 = g.on_tool_call_request(state=restored, call=c)
+    assert d2.action == PolicyAction.CACHE
+    assert d2.cached_result is not None
+    assert d2.cached_result.payload is None
+
+@test("serialization backward compatibility with v4 state")
+def _():
+    payload = {
+        "version": 4,
+        "run_id": "compat-v4",
+        "tool_stream": [],
+        "tool_query_sigs": {},
+        "quarantined_tools": {},
+        "error_streaks": {},
+        "attempted_side_effect_calls": {},
+        "executed_side_effect_calls": {},
+        "tool_call_counts": {},
+        "stall_streak": 0,
+        "stall_pattern_streak": 0,
+        "stall_rewrite_attempts": 0,
+        "last_assistant_token_sigs": None,
+        "last_progress_marker": [0, 0],
+        "unique_tool_calls_seen": [],
+        "unique_tool_results_seen": [],
+        "cumulative_cost": 0.0,
+        "reported_token_cost": 0.0,
+        "budget_warning_emitted": False,
+        "cost_events": [],
+    }
+
+    restored = state_from_json(json.dumps(payload))
+    assert restored.run_id == "compat-v4"
+    assert restored.idempotency_ledger == {}
 
 
 print("\n=== OpenAI Adapter ===")

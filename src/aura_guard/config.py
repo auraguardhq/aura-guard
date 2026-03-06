@@ -105,8 +105,9 @@ class AuraGuardConfig:
     arg_jitter_repeat_threshold: int = 3
 
     # Primitive 2b: per-tool call cap (catches smart reformulation loops)
-    # If an agent calls the same tool more than this many times in a run,
-    # quarantine it regardless of argument similarity.
+    # If the same tool is *executed* (passes all prior checks) more than this
+    # many times in a run, quarantine it regardless of argument similarity.
+    # Calls blocked/cached by earlier primitives don't count toward this cap.
     max_calls_per_tool: Optional[int] = None   # None = no cap
 
     # Primitive 3: error retry circuit breaker
@@ -238,7 +239,10 @@ class AuraGuardConfig:
         return self.tool_policies.get(tool_name)
 
     def get_tool_max_calls(self, tool_name: str) -> Optional[int]:
-        """Per-tool call limit: tool policy override > global max_calls_per_tool."""
+        """Per-tool execution limit: tool policy override > global max_calls_per_tool.
+
+        Counts executed calls only (calls blocked by earlier primitives are excluded).
+        """
         policy = self.tool_policies.get(tool_name)
         if policy and policy.max_calls is not None:
             return policy.max_calls

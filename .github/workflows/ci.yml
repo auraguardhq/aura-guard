@@ -33,6 +33,10 @@ jobs:
         run: |
           pytest -q
 
+      - name: Run CLI benchmark (regression check)
+        run: |
+          aura-guard bench --all
+
       - name: Run coverage
         run: |
           pytest --cov=aura_guard --cov-report=term-missing tests/

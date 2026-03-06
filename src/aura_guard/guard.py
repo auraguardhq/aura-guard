@@ -706,6 +706,11 @@ class AuraGuard:
 
         Uses per-tool policy limit if set, otherwise global max_calls_per_tool.
         Returns a REWRITE decision if the cap is exceeded, else None.
+
+        Note: This counts calls that pass all prior checks (identical repeat,
+        jitter, circuit breaker, side-effect gating, budget). Calls blocked by
+        earlier primitives are not counted toward the cap. This means
+        max_calls_per_tool=3 allows 3 *executed* calls, not 3 *attempted* calls.
         """
         cap = self.cfg.get_tool_max_calls(tool)
         if cap is None:
