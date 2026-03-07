@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.10 — 2026-03-07
+
+### New Features
+- **Convenience API:** `guard.run(name, fn, **kwargs)` — one-liner that handles the full check_tool → execute → record_result cycle. Returns the result on ALLOW, returns cached payload on CACHE, raises `GuardDenied` on BLOCK/REWRITE/ESCALATE/FINALIZE.
+- **Decorator API:** `@guard.protect` — wraps any function with automatic guard protection. Tool name inferred from function name (overridable). Supports both `@guard.protect` and `@guard.protect(tool_name="...", side_effect=True)` syntax.
+- **`GuardDenied` exception:** Raised by `run()` and `@guard.protect` when a tool call is denied. Carries the full `PolicyDecision` for inspection.
+- **Async support:** `AsyncAgentGuard.run()` and `@async_guard.protect` support both sync and async tool functions.
+- **Keyword-only enforcement:** Both `run()` and `@guard.protect` require keyword arguments for tool calls. This ensures the guard's signature tracker sees the same arguments the function receives. Positional args raise `TypeError` with a clear message.
+- The 3-method API (`check_tool`, `record_result`, `check_output`) remains unchanged and is still recommended for complex integrations or tools that require positional arguments.
+
 ## 0.3.9 — 2026-03-06
 
 ### Fixes

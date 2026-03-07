@@ -1,33 +1,41 @@
 """aura_guard.middleware
 
-Simplified wrapper for Aura Guard — the "3-method API".
+Simplified wrapper for Aura Guard.
 
-For developers who want minimal integration overhead.
-Reduces the full guard API to: check_tool(), record_result(), check_output().
+Provides two levels of API:
 
-Usage:
-    from aura_guard import AgentGuard
+1. **Convenience API** (simplest):
+   guard.run(name, fn, **kwargs)  — one-liner, handles everything
+   @guard.protect                 — decorator, even simpler
 
-    guard = AgentGuard(secret_key=b"your-secret-key", max_cost_per_run=0.50)
+2. **3-method API** (full control):
+   guard.check_tool(...)          — before each tool call
+   guard.record_result(...)       — after each tool call
+   guard.check_output(...)        — after each LLM output
 
-    # Before each tool call
-    decision = guard.check_tool("search_kb", args={"query": "refund policy"})
-    if decision.action == "allow":
-        result = execute_tool(...)
-        guard.record_result(ok=True, payload=result)
-    else:
-        handle_decision(decision)
+Usage (convenience):
+    from aura_guard import AgentGuard, GuardDenied
 
-    # After each LLM output
-    stall = guard.check_output("I apologize for the inconvenience...")
-    if stall:
-        handle_stall(stall)
+    guard = AgentGuard(secret_key=b"your-secret-key", side_effect_tools={"refund"})
+
+    # One-liner
+    result = guard.run("search_kb", search_kb, query="refund policy")
+
+    # Decorator
+    @guard.protect
+    def refund(order_id, amount): ...
+
+    try:
+        refund(order_id="o1", amount=50)
+    except GuardDenied as e:
+        print(f"Blocked: {e.reason}")
 """
 
 from __future__ import annotations
 
+import functools
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .config import AuraGuardConfig, CostModel
 from .guard import AuraGuard, GuardState
@@ -37,6 +45,21 @@ from .types import PolicyAction, PolicyDecision, ToolCall, ToolResult
 import logging
 
 logger = logging.getLogger("aura_guard")
+
+class GuardDenied(Exception):
+    """Raised by guard.run() and @guard.protect when a tool call is denied.
+
+    Attributes:
+        action: The PolicyAction (BLOCK, REWRITE, ESCALATE, FINALIZE)
+        reason: Human-readable reason for the denial
+        decision: The full PolicyDecision object
+    """
+
+    def __init__(self, decision: PolicyDecision):
+        self.action = decision.action
+        self.reason = decision.reason
+        self.decision = decision
+        super().__init__(f"GuardDenied: {decision.action.value} — {decision.reason}")
 
 
 class AgentGuard:
@@ -277,6 +300,115 @@ class AgentGuard:
             output_tokens=output_tokens,
             cost_override=cost_override,
         )
+
+    def run(
+        self,
+        tool_name: str,
+        fn: Callable[..., Any],
+        *,
+        ticket_id: Optional[str] = None,
+        side_effect: Optional[bool] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute a tool function with full guard protection in one call.
+
+        Handles the complete check_tool → execute → record_result cycle.
+
+        Returns the tool's return value on ALLOW.
+        Returns cached payload on CACHE (may be None if restored from serialization).
+        Raises GuardDenied on BLOCK, REWRITE, ESCALATE, or FINALIZE.
+
+        All tool arguments MUST be passed as keyword arguments. This ensures the
+        guard's signature tracker sees the same arguments the function receives.
+        Positional arguments are not supported — use the 3-method API
+        (check_tool / record_result) if your tool requires positional args.
+
+        Example:
+            result = guard.run("search_kb", search_kb, query="refund policy")
+            result = guard.run("refund", refund, order_id="o1", ticket_id="t1", side_effect=True)
+
+        Args:
+            tool_name: Name of the tool (used for guard tracking).
+            fn: The callable to execute if the guard allows it.
+            ticket_id: Optional ticket/session ID for idempotency.
+            side_effect: Override whether this tool is a side-effect.
+            **kwargs: Keyword arguments passed to fn AND used as tool args for guard signature tracking.
+        """
+        decision = self.check_tool(
+            tool_name, args=kwargs, ticket_id=ticket_id, side_effect=side_effect,
+        )
+
+        if decision.action == PolicyAction.ALLOW:
+            try:
+                result = fn(**kwargs)
+                self.record_result(ok=True, payload=result)
+                return result
+            except Exception as exc:
+                self.record_result(ok=False, error_code=type(exc).__name__)
+                raise
+
+        if decision.action == PolicyAction.CACHE:
+            return decision.cached_result.payload if decision.cached_result else None
+
+        raise GuardDenied(decision)
+
+    def protect(
+        self,
+        fn: Optional[Callable[..., Any]] = None,
+        *,
+        tool_name: Optional[str] = None,
+        ticket_id: Optional[str] = None,
+        side_effect: Optional[bool] = None,
+    ) -> Any:
+        """Decorator that wraps a function with guard protection.
+
+        Every call to the decorated function goes through check_tool → execute → record_result.
+
+        IMPORTANT: The decorated function must be called with keyword arguments only.
+        Positional arguments are not tracked by the guard and will cause a TypeError.
+        If your tool requires positional args, use the 3-method API instead.
+
+        Can be used with or without arguments:
+
+            @guard.protect
+            def search_kb(query): ...
+
+            @guard.protect(tool_name="custom_name", side_effect=True)
+            def charge_card(customer_id, amount): ...
+
+        Args:
+            fn: The function to wrap (when used without parentheses).
+            tool_name: Override the tool name (defaults to fn.__name__).
+            ticket_id: Optional ticket/session ID for idempotency.
+            side_effect: Override whether this tool is a side-effect.
+        """
+
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            name = tool_name or func.__name__
+
+            @functools.wraps(func)
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
+                if args:
+                    raise TypeError(
+                        f"@guard.protect requires keyword arguments only. "
+                        f"Call {func.__name__}() with keyword args so the guard "
+                        f"can track them for deduplication. "
+                        f"Got {len(args)} positional arg(s)."
+                    )
+                return self.run(
+                    name, func,
+                    ticket_id=ticket_id, side_effect=side_effect,
+                    **kwargs,
+                )
+
+            return wrapper
+
+        if fn is not None:
+            # Called without parentheses: @guard.protect
+            return decorator(fn)
+        # Called with parentheses: @guard.protect(tool_name="...", ...)
+        return decorator
+
 
     # ─────────────────────────────────────────
     # Convenience

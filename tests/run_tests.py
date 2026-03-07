@@ -345,6 +345,115 @@ def _():
         assert g.missed_results == 0
 
 
+print("\n=== Convenience API ===")
+
+@test("guard.run() allows and returns result")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+    def my_tool(query):
+        return {"results": [query]}
+
+    result = g.run("search_kb", my_tool, query="test")
+    assert result == {"results": ["test"]}
+    assert g.tool_calls_executed == 1
+
+@test("guard.run() raises GuardDenied on denied tool")
+def _():
+    from aura_guard.middleware import GuardDenied
+    from aura_guard.config import ToolPolicy, ToolAccess
+
+    g = AgentGuard(
+        config=AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY)},
+        ),
+    )
+
+    def forbidden():
+        return "nope"
+
+    try:
+        g.run("forbidden", forbidden)
+        assert False, "Expected GuardDenied"
+    except GuardDenied as e:
+        assert e.action == PolicyAction.BLOCK
+
+@test("guard.run() records error on tool exception")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+    def bad_tool(x):
+        raise RuntimeError("boom")
+
+    try:
+        g.run("bad", bad_tool, x=1)
+    except RuntimeError:
+        pass
+
+    assert g.tool_calls_failed == 1
+
+@test("guard.run() rejects positional args")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key")
+
+    def my_tool(query):
+        return query
+
+    try:
+        g.run("search", my_tool, "positional_arg")
+        assert False, "Expected TypeError"
+    except TypeError:
+        pass
+
+@test("@guard.protect decorator works")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+    @g.protect
+    def search_kb(query):
+        return {"hits": [query]}
+
+    result = search_kb(query="test")
+    assert result == {"hits": ["test"]}
+    assert g.tool_calls_executed == 1
+
+@test("@guard.protect with options works")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00, side_effect_tools={"charge"})
+
+    @g.protect(tool_name="charge", side_effect=True)
+    def charge_card(customer_id, amount):
+        return {"charged": amount}
+
+    result = charge_card(customer_id="cus_42", amount=49)
+    assert result == {"charged": 49}
+
+@test("@guard.protect rejects positional args")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key")
+
+    @g.protect
+    def search_kb(query):
+        return query
+
+    try:
+        search_kb("positional")
+        assert False, "Expected TypeError"
+    except TypeError as e:
+        assert "keyword arguments only" in str(e)
+
+@test("@guard.protect preserves function name")
+def _():
+    g = AgentGuard(secret_key=b"test-secret-key")
+
+    @g.protect
+    def my_special_tool(x):
+        return x
+
+    assert my_special_tool.__name__ == "my_special_tool"
+
+
 print("\n=== Serialization ===")
 
 @test("JSON roundtrip")

@@ -9,7 +9,7 @@ Quick start:
 
 from .config import AuraGuardConfig, CostModel, ToolAccess, ToolPolicy
 from .guard import AuraGuard, GuardState
-from .middleware import AgentGuard
+from .middleware import AgentGuard, GuardDenied
 from .async_middleware import AsyncAgentGuard
 from .telemetry import (
     CompositeTelemetry,
@@ -25,12 +25,13 @@ try:
     from importlib.metadata import version as _get_version
     __version__ = _get_version("aura-guard")
 except Exception:
-    __version__ = "0.3.9"  # fallback for editable installs / development
+    __version__ = "0.3.10"  # fallback for editable installs / development
 
 __all__ = [
     # High-level API
     "AgentGuard",
     "AsyncAgentGuard",
+    "GuardDenied",
     # Core engine
     "AuraGuard",
     "AuraGuardConfig",
