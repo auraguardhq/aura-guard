@@ -24,7 +24,9 @@ Works with asyncio, FastAPI, Starlette, and any async framework.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+import asyncio
+import functools
+from typing import Any, Callable, Dict, Optional
 
 from .config import AuraGuardConfig
 from .middleware import AgentGuard
@@ -184,3 +186,97 @@ class AsyncAgentGuard:
     async def reset(self) -> None:
         """Reset state for a new run (same config)."""
         self._sync.reset()
+
+    async def run(
+        self,
+        tool_name: str,
+        fn: Callable[..., Any],
+        *,
+        ticket_id: Optional[str] = None,
+        side_effect: Optional[bool] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute a tool function with full guard protection (async).
+
+        See :meth:`AgentGuard.run` for full documentation.
+
+        If fn is a coroutine function, it will be awaited.
+        All tool arguments must be keyword arguments.
+        """
+        decision = await self.check_tool(
+            tool_name, args=kwargs, ticket_id=ticket_id, side_effect=side_effect,
+        )
+
+        if decision.action == PolicyAction.ALLOW:
+            try:
+                if asyncio.iscoroutinefunction(fn):
+                    result = await fn(**kwargs)
+                else:
+                    result = fn(**kwargs)
+                await self.record_result(ok=True, payload=result)
+                return result
+            except Exception as exc:
+                await self.record_result(ok=False, error_code=type(exc).__name__)
+                raise
+
+        if decision.action == PolicyAction.CACHE:
+            return decision.cached_result.payload if decision.cached_result else None
+
+        from .middleware import GuardDenied
+        raise GuardDenied(decision)
+
+    def protect(
+        self,
+        fn: Optional[Callable[..., Any]] = None,
+        *,
+        tool_name: Optional[str] = None,
+        ticket_id: Optional[str] = None,
+        side_effect: Optional[bool] = None,
+    ) -> Any:
+        """Decorator that wraps a function with async guard protection.
+
+        See :meth:`AgentGuard.protect` for full documentation.
+        All tool arguments must be keyword arguments.
+        """
+
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+            name = tool_name or func.__name__
+
+            if asyncio.iscoroutinefunction(func):
+                @functools.wraps(func)
+                async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                    if args:
+                        raise TypeError(
+                            f"@guard.protect requires keyword arguments only. "
+                            f"Call {func.__name__}() with keyword args so the guard "
+                            f"can track them for deduplication. "
+                            f"Got {len(args)} positional arg(s)."
+                        )
+                    return await self.run(
+                        name, func,
+                        ticket_id=ticket_id, side_effect=side_effect,
+                        **kwargs,
+                    )
+
+                return async_wrapper
+            else:
+                @functools.wraps(func)
+                def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+                    if args:
+                        raise TypeError(
+                            f"@guard.protect requires keyword arguments only. "
+                            f"Call {func.__name__}() with keyword args so the guard "
+                            f"can track them for deduplication. "
+                            f"Got {len(args)} positional arg(s)."
+                        )
+                    return self._sync.run(
+                        name, func,
+                        ticket_id=ticket_id, side_effect=side_effect,
+                        **kwargs,
+                    )
+
+                return sync_wrapper
+
+        if fn is not None:
+            return decorator(fn)
+        return decorator

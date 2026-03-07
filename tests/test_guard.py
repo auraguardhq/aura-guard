@@ -20,6 +20,7 @@ from aura_guard import (
     CostModel,
     GuardState,
     PolicyAction,
+    PolicyDecision,
     ToolCall,
     ToolResult,
 )
@@ -449,6 +450,198 @@ class TestAgentGuard:
         assert str(result["error"]) == (
             "AgentGuard is not thread-safe. Create one instance per agent run. See docs."
         )
+
+
+class TestConvenienceAPI:
+    def test_run_allows_and_returns_result(self):
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+        def my_tool(query):
+            return {"results": [query]}
+
+        result = g.run("search_kb", my_tool, query="test")
+        assert result == {"results": ["test"]}
+        assert g.tool_calls_executed == 1
+
+    def test_run_returns_cached_on_repeat(self):
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+        call_count = 0
+
+        def my_tool(query):
+            nonlocal call_count
+            call_count += 1
+            return {"results": [query]}
+
+        # Execute 3 times to hit repeat threshold, then 4th should cache
+        for _ in range(3):
+            g.run("get_order", my_tool, query="same")
+        g.run("get_order", my_tool, query="same")
+        assert g.cache_hits > 0
+
+    def test_run_raises_guard_denied_on_block(self):
+        from aura_guard import GuardDenied
+        from aura_guard.config import ToolPolicy, ToolAccess
+
+        g = AgentGuard(
+            secret_key=b"test-secret-key",
+            config=AuraGuardConfig(
+                secret_key=b"test-secret-key",
+                tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY, deny_reason="not allowed")},
+            ),
+        )
+
+        def forbidden():
+            return "should not run"
+
+        with pytest.raises(GuardDenied) as exc_info:
+            g.run("forbidden", forbidden)
+
+        assert exc_info.value.action == PolicyAction.BLOCK
+        assert "not allowed" in exc_info.value.reason
+
+    def test_run_records_error_on_exception(self):
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+        def failing_tool(query):
+            raise ValueError("tool broke")
+
+        with pytest.raises(ValueError, match="tool broke"):
+            g.run("bad_tool", failing_tool, query="test")
+
+        assert g.tool_calls_failed == 1
+        assert g.tool_calls_executed == 1
+
+    def test_run_keyword_only_enforcement(self):
+        """run() enforces keyword-only args via the * in its signature."""
+        g = AgentGuard(secret_key=b"test-secret-key")
+
+        def my_tool(query):
+            return query
+
+        # This should raise TypeError because positional args after fn are not allowed
+        with pytest.raises(TypeError):
+            g.run("search", my_tool, "positional_arg")
+
+    def test_protect_decorator_basic(self):
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+        @g.protect
+        def search_kb(query):
+            return {"hits": [query]}
+
+        result = search_kb(query="refund policy")
+        assert result == {"hits": ["refund policy"]}
+        assert g.tool_calls_executed == 1
+
+    def test_protect_decorator_with_options(self):
+        g = AgentGuard(
+            secret_key=b"test-secret-key",
+            max_cost_per_run=1.00,
+            side_effect_tools={"charge"},
+        )
+
+        @g.protect(tool_name="charge", side_effect=True)
+        def charge_card(customer_id, amount):
+            return {"charged": amount}
+
+        result = charge_card(customer_id="cus_42", amount=49)
+        assert result == {"charged": 49}
+        assert g.tool_calls_executed == 1
+
+    def test_protect_rejects_positional_args(self):
+        g = AgentGuard(secret_key=b"test-secret-key")
+
+        @g.protect
+        def search_kb(query):
+            return query
+
+        with pytest.raises(TypeError, match="keyword arguments only"):
+            search_kb("positional_value")
+
+    def test_protect_preserves_function_name(self):
+        g = AgentGuard(secret_key=b"test-secret-key")
+
+        @g.protect
+        def my_special_tool(x):
+            return x
+
+        assert my_special_tool.__name__ == "my_special_tool"
+
+    def test_guard_denied_attributes(self):
+        from aura_guard import GuardDenied
+
+        decision = PolicyDecision(action=PolicyAction.BLOCK, reason="test_reason")
+        exc = GuardDenied(decision)
+        assert exc.action == PolicyAction.BLOCK
+        assert exc.reason == "test_reason"
+        assert exc.decision is decision
+        assert "block" in str(exc)
+        assert "test_reason" in str(exc)
+
+
+class TestAsyncConvenienceAPI:
+    def test_async_run(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+            async def async_search(query):
+                return {"results": [query]}
+
+            result = await g.run("search_kb", async_search, query="test")
+            assert result == {"results": ["test"]}
+            assert g.stats["tool_calls_executed"] == 1
+
+        asyncio.run(_test())
+
+    def test_async_run_sync_fn(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+            def sync_search(query):
+                return {"results": [query]}
+
+            result = await g.run("search_kb", sync_search, query="test")
+            assert result == {"results": ["test"]}
+
+        asyncio.run(_test())
+
+    def test_async_protect_decorator(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+            @g.protect
+            async def search_kb(query):
+                return {"hits": [query]}
+
+            result = await search_kb(query="test")
+            assert result == {"hits": ["test"]}
+
+        asyncio.run(_test())
+
+    def test_async_protect_rejects_positional_args(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key")
+
+            @g.protect
+            async def search_kb(query):
+                return query
+
+            with pytest.raises(TypeError, match="keyword arguments only"):
+                await search_kb("positional")
+
+        asyncio.run(_test())
 
 
 # ─────────────────────────────────────
