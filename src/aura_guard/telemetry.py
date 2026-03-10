@@ -78,6 +78,18 @@ class InMemoryTelemetry:
 class WebhookTelemetry:
     """Send guard events to an HTTP webhook (Slack, PagerDuty, custom dashboard).
 
+    .. warning:: LATENCY IMPACT
+
+       This sink performs synchronous HTTP calls (urllib) on every guard event.
+       Each call blocks for up to ``timeout_seconds`` (default 2.0s). This
+       adds network latency to the guard decision path and violates the
+       "sub-millisecond overhead" guarantee.
+
+       For production use, prefer:
+       - LoggingTelemetry + a log shipper (Fluentd, Vector, etc.)
+       - A custom async sink that buffers and ships events out-of-band
+       - CompositeTelemetry with InMemoryTelemetry for local + async shipping
+
     Events are fire-and-forget with a short timeout.
     Failed deliveries are silently dropped (guard must not block on telemetry).
     """
@@ -111,6 +123,8 @@ class SlackWebhookTelemetry:
     """Format guard events as Slack messages and send via incoming webhook.
 
     Formats events into human-readable Slack messages with emoji indicators.
+
+    .. warning:: LATENCY IMPACT — same as WebhookTelemetry. See its docstring.
     """
 
     webhook_url: str

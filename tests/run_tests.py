@@ -50,6 +50,15 @@ cfg = AuraGuardConfig(secret_key=b"test-secret-key",
 
 print("\n=== Primitive 1: Identical Repeat ===")
 
+
+@test("rejects string secret_key")
+def _():
+    try:
+        AuraGuardConfig(secret_key="not-bytes")
+        assert False, "Expected TypeError"
+    except TypeError as e:
+        assert "secret_key must be bytes" in str(e)
+
 @test("allows first calls")
 def _():
     g = AuraGuard(config=cfg)
@@ -238,6 +247,19 @@ def _():
     assert s.cumulative_cost == cost_before_cache, "Cached result should be free"
 
 
+
+@test("cost_events bounded by max_cost_events")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_events=5)
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    for i in range(10):
+        c = ToolCall(name="search", args={"q": f"q{i}"})
+        d = g.on_tool_call_request(state=s, call=c)
+        if d.action == PolicyAction.ALLOW:
+            g.on_tool_result(state=s, call=c, result=ToolResult(ok=True, payload=f"r{i}"))
+    assert len(s.cost_events) <= 5
+
 @test("per-tool call cap quarantines after N calls")
 def _():
     cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_calls_per_tool=3)
@@ -260,6 +282,34 @@ def _():
     d5 = g.on_tool_call_request(state=s, call=call5)
     assert d5.action == PolicyAction.ALLOW, f"Different tool should be allowed, got {d5.action}"
 
+
+
+print("\n=== Core Shadow Mode ===")
+
+@test("shadow_mode suppresses block in core AuraGuard")
+def _():
+    from aura_guard.config import ToolPolicy, ToolAccess
+    cfg = AuraGuardConfig(
+        secret_key=b"test-secret-key",
+        shadow_mode=True,
+        tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY)},
+    )
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    c = ToolCall(name="forbidden", args={"x": 1})
+    d = g.on_tool_call_request(state=s, call=c)
+    assert d.action == PolicyAction.ALLOW
+    assert d.reason == "shadow_allow"
+
+@test("shadow_mode suppresses stall in core AuraGuard")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", shadow_mode=True)
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    text = "I apologize for the inconvenience. We're looking into it."
+    for _ in range(10):
+        d = g.on_llm_output(state=s, text=text)
+        assert d is None
 
 print("\n=== AgentGuard Middleware ===")
 

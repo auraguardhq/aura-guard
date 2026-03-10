@@ -40,7 +40,13 @@ from .types import CostEvent, PolicyAction, PolicyDecision, ToolCall, ToolCallSi
 # ================================
 
 def _canonicalize(obj: Any) -> Any:
-    """Convert `obj` into a JSON-serializable structure with deterministic ordering."""
+    """Convert `obj` into a JSON-serializable structure with deterministic ordering.
+
+    For stable signatures, tool args and payloads should use JSON-serializable
+    primitives (str, int, float, bool, None, list, dict). Custom objects fall
+    back to str(obj), which may be nondeterministic (e.g. memory addresses)
+    and could weaken deduplication/caching.
+    """
     if obj is None or isinstance(obj, (bool, int, float, str)):
         return obj
     if isinstance(obj, bytes):
@@ -194,6 +200,13 @@ class GuardState:
        synchronization. For concurrent agent runs, create one GuardState per
        run. For distributed/multi-process agents, serialize and share state
        explicitly using :mod:`aura_guard.serialization`.
+
+    .. warning:: run_id MUST NOT contain PII
+
+       run_id is emitted in telemetry events and stored in serialized state
+       as raw text. Use a random identifier (default: uuid4). Do not set
+       run_id to user IDs, emails, ticket IDs, or any personally identifiable
+       information.
     """
 
     run_id: str = field(default_factory=lambda: uuid4().hex)
@@ -315,6 +328,8 @@ class AuraGuard:
             event="token_cost_reported", tool="llm",
             amount=actual, cumulative=state.cumulative_cost,
         ))
+        if len(state.cost_events) > self.cfg.max_cost_events:
+            state.cost_events = state.cost_events[-self.cfg.max_cost_events:]
         self._emit(
             "token_cost_reported",
             state=state,
@@ -401,14 +416,36 @@ class AuraGuard:
     # -------------------------
 
     def new_state(self, run_id: Optional[str] = None) -> GuardState:
-        """Create a fresh GuardState for a new agent run."""
+        """Create a fresh GuardState for a new agent run.
+
+        Args:
+            run_id: Optional identifier for this run. Defaults to a random UUID.
+                    Must not contain PII — it is emitted in telemetry and stored
+                    in serialized state as raw text.
+        """
         return GuardState(run_id=run_id or uuid4().hex)
 
     def on_tool_call_request(self, *, state: GuardState, call: ToolCall) -> PolicyDecision:
         """Evaluate a tool call before executing it.
 
         Returns a PolicyDecision telling the orchestrator what to do.
+        In shadow_mode, non-ALLOW decisions are suppressed and returned as ALLOW.
         """
+        decision = self._evaluate_tool_call(state=state, call=call)
+
+        if self.cfg.shadow_mode and decision.action != PolicyAction.ALLOW:
+            self._emit(
+                "shadow_would_deny", state=state,
+                tool=call.name,
+                original_action=decision.action.value,
+                original_reason=decision.reason,
+            )
+            return PolicyDecision(action=PolicyAction.ALLOW, reason="shadow_allow")
+
+        return decision
+
+    def _evaluate_tool_call(self, *, state: GuardState, call: ToolCall) -> PolicyDecision:
+        """Internal: evaluate a tool call. Returns the raw decision (no shadow suppression)."""
         tool = call.name
         is_side_effect = self.cfg.is_side_effect_tool(tool, call.side_effect)
 
@@ -447,6 +484,10 @@ class AuraGuard:
             if policy.require_args:
                 missing = policy.require_args - set(call.args.keys())
                 if missing:
+                    self._emit(
+                        "tool_policy_missing_args", state=state,
+                        tool=tool, missing_args=sorted(missing),
+                    )
                     return PolicyDecision(
                         action=PolicyAction.BLOCK,
                         reason=f"policy_missing_args:{','.join(sorted(missing))}",
@@ -532,6 +573,8 @@ class AuraGuard:
                     pct=round(projected / self.cfg.max_cost_per_run * 100, 1),
                 )
                 state.cost_events.append(evt)
+                if len(state.cost_events) > self.cfg.max_cost_events:
+                    state.cost_events = state.cost_events[-self.cfg.max_cost_events:]
                 self._emit(
                     "budget_exceeded_escalate",
                     state=state,
@@ -547,12 +590,14 @@ class AuraGuard:
                     escalation_packet={
                         "route": None,
                         "summary": (
-                            f"Agent run exceeded cost budget "
-                            f"(${state.cumulative_cost:.2f} spent / "
+                            f"Agent run would exceed cost budget "
+                            f"(${state.cumulative_cost:.2f} spent + "
+                            f"${estimated:.2f} projected / "
                             f"${self.cfg.max_cost_per_run:.2f} limit)"
                         ),
                         "tags": ["budget_exceeded"],
                         "cumulative_cost": round(state.cumulative_cost, 4),
+                        "projected_cost": round(projected, 4),
                         "limit": self.cfg.max_cost_per_run,
                     },
                 )
@@ -568,6 +613,8 @@ class AuraGuard:
                     limit=self.cfg.max_cost_per_run, pct=pct,
                 )
                 state.cost_events.append(evt)
+                if len(state.cost_events) > self.cfg.max_cost_events:
+                    state.cost_events = state.cost_events[-self.cfg.max_cost_events:]
                 self._emit(
                     "budget_warning",
                     state=state,
@@ -813,9 +860,28 @@ class AuraGuard:
                 event="cost_incurred", tool=tool,
                 amount=est, cumulative=state.cumulative_cost,
             ))
+            if len(state.cost_events) > self.cfg.max_cost_events:
+                state.cost_events = state.cost_events[-self.cfg.max_cost_events:]
 
     def on_llm_output(self, *, state: GuardState, text: Any) -> Optional[PolicyDecision]:
-        """Inspect an assistant output to detect stall/no-state-change."""
+        """Inspect an assistant output to detect stall/no-state-change.
+
+        In shadow_mode, non-None decisions are suppressed and None is returned.
+        """
+        decision = self._evaluate_llm_output(state=state, text=text)
+
+        if decision is not None and self.cfg.shadow_mode:
+            self._emit(
+                "shadow_would_intervene", state=state,
+                original_action=decision.action.value,
+                original_reason=decision.reason,
+            )
+            return None
+
+        return decision
+
+    def _evaluate_llm_output(self, *, state: GuardState, text: Any) -> Optional[PolicyDecision]:
+        """Internal: evaluate LLM output. Returns the raw decision (no shadow suppression)."""
 
         if not isinstance(text, str):
             return None

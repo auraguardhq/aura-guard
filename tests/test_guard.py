@@ -150,6 +150,10 @@ class TestConfigValidation:
         with pytest.raises(ValueError, match=message):
             AuraGuardConfig(secret_key=b"test-secret-key", **kwargs)
 
+    def test_rejects_string_secret_key(self):
+        with pytest.raises(TypeError, match="secret_key must be bytes"):
+            AuraGuardConfig(secret_key="not-bytes")
+
 
 # ─────────────────────────────────────
 # Primitive 3: Error retry circuit breaker
@@ -1000,3 +1004,66 @@ class TestSecretKeyEnforcement:
     @pytest.mark.parametrize("shadow_mode", [True, False])
     def test_custom_key_allowed_in_both_modes(self, shadow_mode):
         AuraGuard(config=AuraGuardConfig(secret_key=b"my-production-key", shadow_mode=shadow_mode))
+
+
+class TestCoreShadowMode:
+    """Test that shadow_mode works in the core AuraGuard engine, not just the AgentGuard wrapper."""
+
+    def test_shadow_mode_suppresses_block_in_core(self):
+        """on_tool_call_request returns ALLOW when shadow_mode=True, even if the tool would be blocked."""
+        from aura_guard.config import ToolPolicy, ToolAccess
+
+        cfg = AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            shadow_mode=True,
+            tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY, deny_reason="not allowed")},
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        call = ToolCall(name="forbidden", args={"x": 1})
+        decision = guard.on_tool_call_request(state=state, call=call)
+        assert decision.action == PolicyAction.ALLOW
+        assert decision.reason == "shadow_allow"
+
+    def test_shadow_mode_suppresses_stall_in_core(self):
+        """on_llm_output returns None when shadow_mode=True, even if stall is detected."""
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", shadow_mode=True)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        text = "I apologize for the inconvenience. We're looking into it."
+        for _ in range(10):
+            decision = guard.on_llm_output(state=state, text=text)
+            assert decision is None  # shadow mode: never intervenes
+
+    def test_shadow_mode_false_still_enforces_in_core(self):
+        """Verify enforcement still works when shadow_mode=False."""
+        from aura_guard.config import ToolPolicy, ToolAccess
+
+        cfg = AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            shadow_mode=False,
+            tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY)},
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        call = ToolCall(name="forbidden", args={"x": 1})
+        decision = guard.on_tool_call_request(state=state, call=call)
+        assert decision.action == PolicyAction.BLOCK
+
+
+class TestCostEventsCap:
+    def test_cost_events_bounded_by_max(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_events=5)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        for i in range(10):
+            call = ToolCall(name="search", args={"q": f"query_{i}"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload=f"r{i}"))
+
+        assert len(state.cost_events) <= 5

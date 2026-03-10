@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.3.11 — 2026-03-09
+
+### Fixes
+- **P0:** `shadow_mode` now works in the core `AuraGuard` engine, not just the `AgentGuard` wrapper. `on_tool_call_request()` and `on_llm_output()` now suppress non-ALLOW decisions when `shadow_mode=True`, returning ALLOW / None instead. Previously, using `AuraGuard` directly with `shadow_mode=True` would still return BLOCK/REWRITE/ESCALATE decisions.
+- **P1:** Updated README serialization warning — idempotency ledger keys survive serialization since v0.3.9. The old warning incorrectly stated they did not.
+- **P1:** Documented that `run_id` must not contain PII — it is emitted in telemetry and stored in serialized state as raw text.
+- **P1:** Added latency warning to `WebhookTelemetry` and `SlackWebhookTelemetry` docstrings — synchronous HTTP calls add network latency to every guard decision.
+- **P1:** `cost_events` list is now bounded by `max_cost_events` (default 500). Previously grew unbounded.
+- **P2:** Budget escalation message now shows projected cost, not just spent.
+- **P2:** Missing `_emit()` added for `policy_missing_args` blocks.
+- **P2:** `secret_key` type is now validated early — passing a string instead of bytes raises `TypeError` with a clear message.
+- **P2:** Documented that `side_effect_max_executed_per_run` is per-tool, not global.
+- **P2:** Documented that `error_code` should be coarse classifications, not raw exception messages.
+- **P2:** Documented that `_canonicalize` expects JSON-serializable types for stable signatures.
+
 ## 0.3.10 — 2026-03-07
 
 ### New Features

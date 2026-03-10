@@ -66,6 +66,11 @@ class ToolResult:
 
     `payload` may contain PII.
     `payload_sig` is a safe keyed signature (HMAC) computed by Aura Guard.
+
+    `error_code` should be a coarse classification (e.g. "429", "timeout",
+    "5xx"), not a raw exception message. Error codes are persisted in
+    serialized state and may be emitted in telemetry. Do not include PII,
+    stack traces, or detailed error messages.
     """
 
     ok: bool

@@ -118,6 +118,8 @@ class AuraGuardConfig:
     )
 
     # Primitive 4: side-effect gating
+    # Max executions of each side-effect tool per run (per-tool, not global).
+    # E.g., with default 1: refund can execute once AND cancel can execute once.
     side_effect_max_executed_per_run: int = 1
     side_effect_tools: Set[str] = field(
         default_factory=lambda: {"send_reply", "refund", "cancel"}
@@ -168,6 +170,7 @@ class AuraGuardConfig:
     # Prevents unbounded memory growth in long-running agents.
     max_cache_entries: int = 1000
     max_unique_calls_tracked: int = 5000
+    max_cost_events: int = 500
 
     # TOOL POLICIES
     # -------------
@@ -184,6 +187,11 @@ class AuraGuardConfig:
     shadow_mode: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.secret_key, bytes):
+            raise TypeError(
+                f"secret_key must be bytes, got {type(self.secret_key).__name__}. "
+                f"Use b\"your-key\" instead of \"your-key\"."
+            )
         if self.repeat_toolcall_threshold < 1:
             raise ValueError("repeat_toolcall_threshold must be >= 1")
         if not 0.0 <= self.arg_jitter_similarity_threshold <= 1.0:
@@ -210,6 +218,8 @@ class AuraGuardConfig:
             raise ValueError("max_unique_calls_tracked must be >= 1")
         if self.tool_loop_window < 1:
             raise ValueError("tool_loop_window must be >= 1")
+        if self.max_cost_events < 1:
+            raise ValueError("max_cost_events must be >= 1")
 
     # --------------------------------
     # Helper methods
