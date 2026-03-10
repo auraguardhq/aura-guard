@@ -5,7 +5,7 @@
 Reliability middleware for tool-using AI agents. Prevents tool loops, duplicate side-effects, and retry storms.
 
 ```python
-from aura_guard import AgentGuard, PolicyAction
+from aura_guard import AgentGuard, GuardDenied
 
 guard = AgentGuard(
     secret_key=b"your-secret-key",
@@ -14,17 +14,17 @@ guard = AgentGuard(
     max_cost_per_run=1.00,
 )
 
-decision = guard.check_tool("search_kb", args={"query": "refund policy"})
+# One-liner: check, execute, record — all in one call
+result = guard.run("search_kb", search_kb, query="refund policy")
 
-if decision.action == PolicyAction.ALLOW:
-    result = execute_tool(...)
-    guard.record_result(ok=True, payload=result)
-elif decision.action == PolicyAction.CACHE:
-    result = decision.cached_result.payload
-elif decision.action == PolicyAction.REWRITE:
-    inject_into_prompt(decision.injected_system)
-else:
-    stop_agent(decision.reason)
+# Decorator: automatic guard on every call
+@guard.protect
+def refund(order_id, amount): ...
+
+try:
+    refund(order_id="ORD-123", amount=50)
+except GuardDenied as e:
+    handle_denial(e.decision)
 ```
 
 Aura Guard sits between your agent and its tools. Before each tool call, it returns a deterministic decision: ALLOW, CACHE, BLOCK, REWRITE, or ESCALATE. No LLM calls, sub-millisecond overhead. Core engine makes no network requests; optional webhook telemetry performs HTTP calls.
@@ -155,13 +155,44 @@ max_steps doesn't distinguish productive calls from loops. Retry libraries don't
 ## Integration
 
 Aura Guard does **not** call your LLM and does **not** execute tools.  
-You keep your agent loop. You just add 3 hook calls:
+You keep your agent loop. Aura Guard provides two API levels:
+
+### Convenience API (simplest)
+
+```python
+from aura_guard import AgentGuard, GuardDenied
+
+guard = AgentGuard(
+    secret_key=b"your-secret-key",
+    side_effect_tools={"refund", "cancel"},
+    max_cost_per_run=1.00,
+)
+
+# One-liner: guard checks, executes, and records the result
+result = guard.run("search_kb", search_kb, query="refund policy")
+
+# Decorator: every call is automatically guarded
+@guard.protect
+def refund(order_id, amount):
+    return payment_api.refund(order_id=order_id, amount=amount)
+
+try:
+    refund(order_id="ORD-123", amount=50)
+except GuardDenied as e:
+    print(f"Blocked: {e.reason}")  # e.decision has full details
+```
+
+`guard.run()` and `@guard.protect` require keyword arguments only. This ensures the guard's signature tracker sees the same arguments the function receives.
+
+### 3-method API (full control)
+
+For complex agent loops (OpenAI, Anthropic, LangChain), use the 3 hook calls directly:
 
 1) `check_tool(...)` **before** you execute a tool  
 2) `record_result(...)` **after** the tool finishes (success or error)  
 3) `check_output(...)` **after** the model produces text (optional but recommended)
 
-### Minimal example
+### Full control example
 
 ```python
 from aura_guard import AgentGuard, PolicyAction
@@ -423,9 +454,9 @@ decision = await guard.check_tool("search_kb", args={"query": "test"})
 
 ## Status & limitations
 
-Aura Guard is v0.3 — the API is stabilizing but may change before v1.0.
+Aura Guard is v0.4 — the API is stabilizing but may change before v1.0.
 
-**Stable:** The 3-method API (check_tool / record_result / check_output), the 6 PolicyAction values, and AuraGuardConfig.
+**Stable:** The 3-method API (check_tool / record_result / check_output), the convenience API (guard.run / @guard.protect / GuardDenied), the 6 PolicyAction values, and AuraGuardConfig.
 
 **May change:** Default threshold values, serialization format (versioned — old state will error, not silently corrupt), telemetry event names.
 
@@ -445,7 +476,7 @@ If you don't set `side_effect_executed=True` on timeout, the guard may allow a r
 
 **Limitations:**
 - In-memory state only. Not thread-safe. Create one guard per agent run.
-- Side-effect enforcement is at-most-once within a single process. Not exactly-once across restarts.
+- Side-effect enforcement is at-most-once. Idempotency ledger keys survive serialization (since v0.3.9), so replay protection works across restarts if you serialize/restore state. Raw payloads are not persisted (PII safety).
 - Argument jitter detection uses token overlap, not semantic similarity. English-biased.
 - Cost estimates are configurable approximations, not actual billing data.
 - Serialized state and telemetry contain HMAC signatures only. In-memory caches hold tool payloads for caching and idempotency during a run.
