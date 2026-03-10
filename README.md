@@ -29,6 +29,8 @@ else:
 
 Aura Guard sits between your agent and its tools. Before each tool call, it returns a deterministic decision: ALLOW, CACHE, BLOCK, REWRITE, or ESCALATE. No LLM calls, sub-millisecond overhead. Core engine makes no network requests; optional webhook telemetry performs HTTP calls.
 
+The core runtime now uses 8 safety primitives (v0.4.0), including multi-tool sequence loop detection for ping-pong/circular delegation loops.
+
 Python 3.10+ · Zero dependencies · Apache-2.0
 
 
@@ -56,6 +58,7 @@ Same agents. Same prompts. Same task. Guard detects the loop automatically.
 - [The problem](#the-problem)
 - [Integration](#integration)
 - [Configuration](#configuration-the-knobs-that-matter)
+- [Enforcement primitives](#enforcement-primitives)
 - [Shadow mode](#shadow-mode-evaluate-before-enforcing)
 - [Thread Safety](#thread-safety)
 - [Async support](#async-support)
@@ -323,6 +326,17 @@ Most teams start here:
   so reports are meaningful
 
 For advanced options, see `AuraGuardConfig` in `src/aura_guard/config.py`.
+
+## Enforcement primitives
+
+1. Identical tool-call repeat protection
+2. Argument-jitter loop detection
+3. Error retry circuit breaker
+4. Side-effect gating + idempotency ledger
+5. No-state-change stall detection
+6. Cost budget enforcement
+7. Tool policy layer
+8. **Multi-tool sequence loop detection** — Detects repeating tool-call patterns (A→B→A→B, A→B→C→A→B→C). Catches multi-agent ping-pong and circular delegation. Quarantines the pattern and forces resolution.
 
 ## Shadow mode (evaluate before enforcing)
 

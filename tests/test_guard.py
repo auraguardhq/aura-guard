@@ -848,6 +848,129 @@ class TestTelemetry:
         assert len(telemetry.find("bar")) == 1
 
 
+class TestSequenceLoopDetection:
+    """Tests for Primitive 8: multi-tool sequence loop detection."""
+
+    def test_detects_ping_pong_loop(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        decisions = []
+        for t in ["agent_a", "agent_b", "agent_a", "agent_b"]:
+            call = ToolCall(name=t, args={"task": f"do {t} work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            decisions.append(d)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload=f"result_{t}"))
+
+        assert PolicyAction.REWRITE in [d.action for d in decisions]
+        rewrite_decisions = [d for d in decisions if d.action == PolicyAction.REWRITE]
+        assert any("sequence_loop" in d.reason for d in rewrite_decisions)
+
+    def test_detects_three_tool_cycle(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        decisions = []
+        for t in ["triage", "research", "action", "triage", "research", "action"]:
+            call = ToolCall(name=t, args={"task": "work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            decisions.append(d)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload="ok"))
+
+        assert PolicyAction.REWRITE in [d.action for d in decisions]
+
+    def test_no_false_positive_on_varied_tools(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        for t in ["search", "get_order", "check_status", "send_email", "update_ticket"]:
+            call = ToolCall(name=t, args={"id": "123"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            assert d.action == PolicyAction.ALLOW, f"Tool {t} should be allowed, got {d.action}"
+            guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+    def test_disabled_when_config_false(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_detection_enabled=False)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        i = 0
+        for _ in range(3):
+            for t in ["agent_a", "agent_b"]:
+                i += 1
+                call = ToolCall(name=t, args={"task": f"work-{i}"})
+                d = guard.on_tool_call_request(state=state, call=call)
+                assert d.action == PolicyAction.ALLOW
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+    def test_quarantines_tool_on_detection(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        for t in ["agent_a", "agent_b", "agent_a", "agent_b"]:
+            call = ToolCall(name=t, args={"task": "work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        assert any("sequence_loop" in v for v in state.quarantined_tools.values())
+
+    def test_threshold_3_requires_three_repeats(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=3, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        i = 0
+        for t in ["agent_a", "agent_b", "agent_a", "agent_b"]:
+            i += 1
+            call = ToolCall(name=t, args={"task": f"work-{i}"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            assert d.action == PolicyAction.ALLOW, "2x repeat should not trigger with threshold=3"
+            guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        triggered = False
+        for t in ["agent_a", "agent_b"]:
+            i += 1
+            call = ToolCall(name=t, args={"task": f"work-{i}"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            if d.action == PolicyAction.REWRITE:
+                triggered = True
+                break
+            guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        assert triggered, "3rd repeat should trigger with threshold=3"
+
+    def test_rewrite_includes_pattern_in_reason(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        decisions = []
+        for t in ["coordinator", "worker", "coordinator", "worker"]:
+            call = ToolCall(name=t, args={"task": "work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            decisions.append(d)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        rewrite_decisions = [d for d in decisions if d.action == PolicyAction.REWRITE]
+        assert rewrite_decisions
+        assert any("coordinator" in d.reason or "worker" in d.reason for d in rewrite_decisions)
+
+    def test_config_validation(self):
+        with pytest.raises(ValueError, match="sequence_repeat_threshold must be >= 2"):
+            AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=1)
+
+        with pytest.raises(ValueError, match="max_sequence_length must be >= 2"):
+            AuraGuardConfig(secret_key=b"test-secret-key", max_sequence_length=1)
+
+
 # ─────────────────────────────────────
 # OpenAI Adapter
 # ─────────────────────────────────────
