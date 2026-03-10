@@ -113,7 +113,7 @@ class AuraGuardConfig:
     # Primitive 8: multi-tool sequence loop detection
     # Detects repeating sequences of tool calls (e.g. A→B→A→B or A→B→C→A→B→C).
     # Catches multi-agent ping-pong and circular delegation patterns.
-    sequence_repeat_threshold: int = 2        # Number of times a pattern must repeat to trigger (2 = A→B→A→B)
+    sequence_repeat_threshold: int = 3        # Number of times a pattern must repeat to trigger (3 = A→B→A→B→A→B)
     max_sequence_length: int = 4              # Max pattern length to check (2, 3, 4-tool patterns)
     sequence_detection_enabled: bool = True   # Set False to disable sequence detection
 

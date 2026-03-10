@@ -68,8 +68,10 @@ or ping-pong patterns between agents/tools.
   ping-pong (pattern [A,B] repeated twice).
 
 **Configuration:**
-- `sequence_repeat_threshold` (default 2): How many times a pattern must
-  repeat before triggering. 2 means A→B→A→B.
+- `sequence_repeat_threshold` (default 3): How many times a pattern must
+  repeat before triggering. 3 means A→B→A→B→A→B (6 consecutive alternating
+  calls). Threshold 2 was found to cause false positives on normal workflows
+  where two tools alternate legitimately.
 - `max_sequence_length` (default 4): Maximum pattern length to check.
   Checks 2-tool, 3-tool, and 4-tool patterns.
 - `sequence_detection_enabled` (default True): Set False to disable.
