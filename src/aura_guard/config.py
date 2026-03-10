@@ -110,6 +110,13 @@ class AuraGuardConfig:
     # Calls blocked/cached by earlier primitives don't count toward this cap.
     max_calls_per_tool: Optional[int] = None   # None = no cap
 
+    # Primitive 8: multi-tool sequence loop detection
+    # Detects repeating sequences of tool calls (e.g. A→B→A→B or A→B→C→A→B→C).
+    # Catches multi-agent ping-pong and circular delegation patterns.
+    sequence_repeat_threshold: int = 2        # Number of times a pattern must repeat to trigger (2 = A→B→A→B)
+    max_sequence_length: int = 4              # Max pattern length to check (2, 3, 4-tool patterns)
+    sequence_detection_enabled: bool = True   # Set False to disable sequence detection
+
     # Primitive 3: error retry circuit breaker
     error_retry_threshold: int = 2
     # Error codes/classes that should trigger quarantine when repeated.
@@ -220,6 +227,10 @@ class AuraGuardConfig:
             raise ValueError("tool_loop_window must be >= 1")
         if self.max_cost_events < 1:
             raise ValueError("max_cost_events must be >= 1")
+        if self.sequence_repeat_threshold < 2:
+            raise ValueError("sequence_repeat_threshold must be >= 2")
+        if self.max_sequence_length < 2:
+            raise ValueError("max_sequence_length must be >= 2")
 
     # --------------------------------
     # Helper methods

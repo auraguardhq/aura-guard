@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.4.0 — 2026-03-09
+
+### New Features
+- **Primitive 8: Multi-tool sequence loop detection.** Detects repeating sequences of tool calls (A→B→A→B ping-pong, A→B→C→A→B→C circular delegation). Quarantines the current tool and issues REWRITE when a pattern repeats. Configurable via `sequence_repeat_threshold` (default 2), `max_sequence_length` (default 4), and `sequence_detection_enabled` (default True).
+- 3 new benchmark scenarios: ping-pong delegation, circular 3-agent, and mixed normal + sequence loop.
+- Updated `docs/ARCHITECTURE.md` with Primitive 8 design and limitations.
+
 ## 0.3.11 — 2026-03-09
 
 ### Fixes

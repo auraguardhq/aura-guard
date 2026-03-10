@@ -8,7 +8,7 @@ Design goals:
 - Safe-by-default: no raw args, payloads, or ticket IDs persisted.
 - Sub-millisecond overhead: no LLM calls, no network requests.
 
-7 enforcement primitives:
+8 enforcement primitives:
 1. Identical tool-call repeat protection (cache or block)
 2. Argument-jitter loop detection for query-like tools
 3. Error retry circuit breaker (quarantine failing tools)
@@ -16,6 +16,7 @@ Design goals:
 5. No-state-change stall detection (force finalize/escalate)
 6. Cost budget enforcement (auto-escalate on budget overrun)
 7. Tool policy layer (allow/deny/human-approval per tool + risk class)
+8. Multi-tool sequence loop detection (A→B→A→B, A→B→C→A→B→C)
 """
 
 from __future__ import annotations
@@ -746,6 +747,13 @@ class AuraGuard:
         if cap_decision is not None:
             return cap_decision
 
+        # ──────────────────────────────────────────
+        # Primitive 8: Multi-tool sequence loop detection
+        # ──────────────────────────────────────────
+        seq_decision = self._check_sequence_loop(state, tool)
+        if seq_decision is not None:
+            return seq_decision
+
         return PolicyDecision(action=PolicyAction.ALLOW, reason="allow")
 
     def _check_tool_call_cap(self, state: GuardState, tool: str) -> Optional[PolicyDecision]:
@@ -784,6 +792,70 @@ class AuraGuard:
             )
 
         state.tool_call_counts[tool] = count + 1
+        return None
+
+    def _check_sequence_loop(self, state: GuardState, tool: str) -> Optional[PolicyDecision]:
+        """Check for repeating multi-tool sequences (Primitive 8).
+
+        Detects patterns like A→B→A→B (ping-pong) or A→B→C→A→B→C (circular).
+        Uses tool names from the rolling tool_stream.
+
+        Returns a REWRITE decision if a repeating sequence is detected, else None.
+        """
+        if not self.cfg.sequence_detection_enabled:
+            return None
+
+        # Extract tool names from the rolling stream
+        names = [s.name for s in state.tool_stream]
+        n = len(names)
+
+        # Check each pattern length from 2 up to max_sequence_length
+        for pattern_len in range(2, self.cfg.max_sequence_length + 1):
+            needed = pattern_len * self.cfg.sequence_repeat_threshold
+            if n < needed:
+                continue
+
+            # Extract the last `needed` tool names
+            recent = names[-needed:]
+            pattern = recent[:pattern_len]
+
+            # Primitive 8 targets multi-tool loops, not single-tool repeats.
+            if len(set(pattern)) < 2:
+                continue
+
+            # Check if the entire slice is the pattern repeated
+            is_repeating = True
+            for i in range(needed):
+                if recent[i] != pattern[i % pattern_len]:
+                    is_repeating = False
+                    break
+
+            if is_repeating:
+                # Quarantine the current tool to break the cycle
+                state.quarantined_tools[tool] = "sequence_loop"
+                pattern_str = " → ".join(pattern)
+
+                injected = (
+                    f"SYSTEM ALERT: You are stuck in a repeating tool-call loop: "
+                    f"{pattern_str} (repeated {self.cfg.sequence_repeat_threshold} times). "
+                    f"Do not continue this pattern. Use the information you already have "
+                    f"to proceed. If you cannot proceed safely, output an escalation packet."
+                )
+                self._emit(
+                    "sequence_loop_detected",
+                    state=state,
+                    tool=tool,
+                    pattern=pattern,
+                    pattern_length=pattern_len,
+                    repeats=self.cfg.sequence_repeat_threshold,
+                    estimated_cost_avoided=round(self.estimate_tool_cost(tool), 4),
+                )
+                return PolicyDecision(
+                    action=PolicyAction.REWRITE,
+                    reason=f"sequence_loop:{pattern_str}",
+                    injected_system=injected,
+                )
+
         return None
 
     def on_tool_result(self, *, state: GuardState, call: ToolCall, result: ToolResult) -> None:

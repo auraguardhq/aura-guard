@@ -52,11 +52,44 @@ This repo extracts those controls into a focused, standalone SDK.
   or distributed agents, state must be serialized/shared explicitly
   using the provided serialization API.
 
+## Primitive 8: Multi-Tool Sequence Loop Detection
+
+Added in v0.4.0.
+
+Detects repeating sequences of tool calls that indicate circular delegation
+or ping-pong patterns between agents/tools.
+
+**How it works:**
+- After each tool call passes all existing checks, the guard examines the
+  recent tool name history (from `tool_stream`).
+- For each possible pattern length (2, 3, 4 tools), it checks whether the
+  last N entries form the same pattern repeated K times.
+- Example: stream [..., A, B, A, B] with threshold=2 detects a 2-tool
+  ping-pong (pattern [A,B] repeated twice).
+
+**Configuration:**
+- `sequence_repeat_threshold` (default 2): How many times a pattern must
+  repeat before triggering. 2 means A→B→A→B.
+- `max_sequence_length` (default 4): Maximum pattern length to check.
+  Checks 2-tool, 3-tool, and 4-tool patterns.
+- `sequence_detection_enabled` (default True): Set False to disable.
+
+**When triggered:**
+- The last tool in the detected pattern is quarantined.
+- A REWRITE decision is returned with a system prompt describing the loop.
+- The agent is told to use existing information instead of continuing the pattern.
+
+**Limitations:**
+- Detects exact tool-name sequences only. If agents use different tool
+  names for equivalent operations, the pattern won't be detected.
+- The pattern must repeat consecutively — interleaved patterns with
+  unrelated calls in between are not detected.
+
 ## File Structure
 
 ```
 src/aura_guard/
-  guard.py          Core engine — all 7 enforcement primitives
+  guard.py          Core engine — all 8 enforcement primitives
   config.py         Configuration, cost model, and tool policy layer
   middleware.py      AgentGuard wrapper (3-method API)
   types.py          ToolCall, ToolResult, PolicyDecision, PolicyAction

@@ -865,5 +865,263 @@
                 "text": "Your refund of $29.99 has been processed for order ORD-200. Is there anything else I can help with?"
             }
         ]
+    },
+    {
+        "scenario_id": "ag_bench_12",
+        "scenario_name": "Ping-Pong Delegation Loop",
+        "description": "Two tools call each other in alternating pattern (A→B→A→B→A→B)",
+        "failure_mode": "sequence_loop",
+        "tool_cost": 0.04,
+        "steps": [
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "research refund policy"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_researcher",
+                "args": {
+                    "task": "find refund policy details"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "need more details on EU policy"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_researcher",
+                "args": {
+                    "task": "find EU refund policy"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "still need Germany specifics"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_researcher",
+                "args": {
+                    "task": "find Germany refund policy"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "need 2024 updates"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_researcher",
+                "args": {
+                    "task": "find 2024 refund updates"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "need legal references"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_researcher",
+                "args": {
+                    "task": "find legal references"
+                }
+            }
+        ]
+    },
+    {
+        "scenario_id": "ag_bench_13",
+        "scenario_name": "Circular 3-Agent Delegation",
+        "description": "Three tools delegate in a circle (A→B→C→A→B→C)",
+        "failure_mode": "sequence_loop",
+        "tool_cost": 0.04,
+        "steps": [
+            {
+                "type": "tool",
+                "name": "triage_agent",
+                "args": {
+                    "task": "classify customer issue"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "research_agent",
+                "args": {
+                    "task": "look up customer history"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "action_agent",
+                "args": {
+                    "task": "determine action needed"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "triage_agent",
+                "args": {
+                    "task": "re-classify with new info"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "research_agent",
+                "args": {
+                    "task": "look up policy details"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "action_agent",
+                "args": {
+                    "task": "determine refund eligibility"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "triage_agent",
+                "args": {
+                    "task": "verify classification"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "research_agent",
+                "args": {
+                    "task": "look up similar cases"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "action_agent",
+                "args": {
+                    "task": "finalize decision"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "triage_agent",
+                "args": {
+                    "task": "confirm routing"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "research_agent",
+                "args": {
+                    "task": "additional verification"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "action_agent",
+                "args": {
+                    "task": "execute action"
+                }
+            }
+        ]
+    },
+    {
+        "scenario_id": "ag_bench_14",
+        "scenario_name": "Mixed Normal + Sequence Loop",
+        "description": "Normal productive calls followed by a delegation loop that should be caught",
+        "failure_mode": "sequence_loop",
+        "tool_cost": 0.04,
+        "steps": [
+            {
+                "type": "tool",
+                "name": "search_kb",
+                "args": {
+                    "query": "customer order status"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "get_order",
+                "args": {
+                    "order_id": "ORD-456"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "search_kb",
+                "args": {
+                    "query": "shipping policy"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "handle shipping complaint"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_resolver",
+                "args": {
+                    "task": "resolve shipping issue"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "need more shipping info"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_resolver",
+                "args": {
+                    "task": "gather shipping details"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "still unresolved"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_resolver",
+                "args": {
+                    "task": "attempt resolution again"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_coordinator",
+                "args": {
+                    "task": "escalate shipping issue"
+                }
+            },
+            {
+                "type": "tool",
+                "name": "agent_resolver",
+                "args": {
+                    "task": "final attempt"
+                }
+            }
+        ]
     }
 ]

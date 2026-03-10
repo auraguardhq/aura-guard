@@ -311,6 +311,75 @@ def _():
         d = g.on_llm_output(state=s, text=text)
         assert d is None
 
+print("\n=== Primitive 8: Sequence Loop Detection ===")
+
+@test("detects ping-pong loop A→B→A→B")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    tools = ["agent_a", "agent_b", "agent_a", "agent_b"]
+    actions = []
+    for t in tools:
+        c = ToolCall(name=t, args={"task": "work"})
+        d = g.on_tool_call_request(state=s, call=c)
+        actions.append(d.action)
+        if d.action == PolicyAction.ALLOW:
+            g.on_tool_result(state=s, call=c, result=ToolResult(ok=True, payload="ok"))
+    assert PolicyAction.REWRITE in actions, f"Expected REWRITE in {actions}"
+
+@test("detects 3-tool circular loop A→B→C→A→B→C")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    tools = ["triage", "research", "action", "triage", "research", "action"]
+    actions = []
+    for t in tools:
+        c = ToolCall(name=t, args={"task": "work"})
+        d = g.on_tool_call_request(state=s, call=c)
+        actions.append(d.action)
+        if d.action == PolicyAction.ALLOW:
+            g.on_tool_result(state=s, call=c, result=ToolResult(ok=True, payload="ok"))
+    assert PolicyAction.REWRITE in actions, f"Expected REWRITE in {actions}"
+
+@test("no false positive on varied tool calls")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    for t in ["search", "get_order", "check_status", "send_email", "update_ticket"]:
+        c = ToolCall(name=t, args={"id": "123"})
+        d = g.on_tool_call_request(state=s, call=c)
+        assert d.action == PolicyAction.ALLOW, f"{t} should be ALLOW"
+        g.on_tool_result(state=s, call=c, result=ToolResult(ok=True))
+
+@test("sequence detection disabled when config false")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_detection_enabled=False)
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    i = 0
+    for _ in range(3):
+        for t in ["a", "b"]:
+            i += 1
+            c = ToolCall(name=t, args={"x": i})
+            d = g.on_tool_call_request(state=s, call=c)
+            assert d.action == PolicyAction.ALLOW
+            g.on_tool_result(state=s, call=c, result=ToolResult(ok=True))
+
+@test("sequence loop quarantines tool")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    for t in ["a", "b", "a", "b"]:
+        c = ToolCall(name=t, args={"x": 1})
+        d = g.on_tool_call_request(state=s, call=c)
+        if d.action == PolicyAction.ALLOW:
+            g.on_tool_result(state=s, call=c, result=ToolResult(ok=True))
+    assert any("sequence_loop" in v for v in s.quarantined_tools.values())
+
 print("\n=== AgentGuard Middleware ===")
 
 @test("basic flow")
