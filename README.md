@@ -389,7 +389,7 @@ json_str = state_to_json(state)
 state = state_from_json(json_str)
 ```
 
-> ⚠️ `result_cache` and `idempotency_ledger` payloads are excluded from serialization (PII risk). After restoring state, side-effect deduplication relies on `executed_side_effect_calls` counts only — not per-call idempotency keys. If your agent can be interrupted mid-run and resumed from serialized state, a duplicate side-effect is possible on the first call after restore.
+> ⚠️ `result_cache` payloads are excluded from serialization (PII risk). Idempotency ledger **keys** (HMAC signatures) and safe metadata are persisted — replay protection survives serialization. Raw payloads are not stored. After restoring state, a cached replay will return `payload=None` (the guard blocks the duplicate, but the original payload is not available).
 
 ---
 

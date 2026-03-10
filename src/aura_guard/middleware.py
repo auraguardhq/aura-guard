@@ -190,7 +190,10 @@ class AgentGuard:
             ticket_id=ticket_id,
             side_effect=side_effect,
         )
-        decision = self._guard.on_tool_call_request(state=self._state, call=call)
+        if self._shadow and hasattr(self._guard, "_evaluate_tool_call"):
+            decision = self._guard._evaluate_tool_call(state=self._state, call=call)
+        else:
+            decision = self._guard.on_tool_call_request(state=self._state, call=call)
 
         # Shadow mode: log the decision but override to ALLOW
         if self._shadow and decision.action != PolicyAction.ALLOW:
@@ -242,6 +245,14 @@ class AgentGuard:
         """Record the result of the most recent tool call.
 
         Call this after executing a tool that was allowed by check_tool().
+
+        Args:
+            ok: Whether the tool call succeeded.
+            payload: The tool's return value (may contain PII — cached in memory only).
+            error_code: A coarse error classification (e.g. "429", "timeout", "ValueError").
+                        Do not pass raw exception messages — error_code is persisted in
+                        serialized state. Use type(exc).__name__ or a short category string.
+            side_effect_executed: Set to True if the side effect was executed (even on timeout).
         """
         self._assert_same_thread()
         if self._last_call is None:
@@ -266,7 +277,10 @@ class AgentGuard:
         agent should be rewritten, escalated, or finalized.
         """
         self._assert_same_thread()
-        decision = self._guard.on_llm_output(state=self._state, text=text)
+        if self._shadow and hasattr(self._guard, "_evaluate_llm_output"):
+            decision = self._guard._evaluate_llm_output(state=self._state, text=text)
+        else:
+            decision = self._guard.on_llm_output(state=self._state, text=text)
         if decision is not None:
             # Shadow mode: log but don't enforce
             if self._shadow:
