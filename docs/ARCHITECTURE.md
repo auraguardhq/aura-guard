@@ -99,5 +99,5 @@ src/aura_guard/
   telemetry.py      Event emission (pluggable sinks)
   cli.py            CLI entrypoint
   bench/            Benchmark suite + demo
-  adapters/         OpenAI + LangChain adapters
+  adapters/         OpenAI + LangChain + MCP adapters
 ```
