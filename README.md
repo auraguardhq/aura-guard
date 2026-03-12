@@ -29,7 +29,7 @@ except GuardDenied as e:
 
 Aura Guard sits between your agent and its tools. Before each tool call, it returns a deterministic decision: ALLOW, CACHE, BLOCK, REWRITE, or ESCALATE. No LLM calls, sub-millisecond overhead. Core engine makes no network requests; optional webhook telemetry performs HTTP calls.
 
-The core runtime now uses 8 safety primitives (v0.4.0), including multi-tool sequence loop detection for ping-pong/circular delegation loops.
+The core runtime uses 8 safety primitives, including multi-tool sequence loop detection and an MCP adapter for Claude Desktop, Cursor, and any MCP-compatible client.
 
 Python 3.10+ · Zero dependencies · Apache-2.0
 
@@ -481,7 +481,7 @@ decision = await guard.check_tool("search_kb", args={"query": "test"})
 
 ## Status & limitations
 
-Aura Guard is v0.4 — the API is stabilizing but may change before v1.0.
+Aura Guard is v0.5 — the API is stabilizing but may change before v1.0.
 
 **Stable:** The 3-method API (check_tool / record_result / check_output), the convenience API (guard.run / @guard.protect / GuardDenied), the 6 PolicyAction values, and AuraGuardConfig.
 
