@@ -94,8 +94,9 @@ def send_email(to: str, subject: str, body: str) -> str:
 
 
 if __name__ == "__main__":
-    print("Starting guarded MCP server (stdio)...")
-    print(f"Guard config: max_cost={mcp.guard.cost_limit}, max_calls_per_tool=5")
-    print("Side-effect tools: refund, send_email")
-    print("AuraGuard will prevent: loops, duplicate refunds, retry storms, stalls")
+    import sys
+    # MCP stdio uses stdout for JSON-RPC — never print() to stdout.
+    print("Starting guarded MCP server (stdio)...", file=sys.stderr)
+    print(f"Guard config: max_cost={mcp.guard.cost_limit}, max_calls_per_tool=5", file=sys.stderr)
+    print("Side-effect tools: refund, send_email", file=sys.stderr)
     mcp.run(transport="stdio")

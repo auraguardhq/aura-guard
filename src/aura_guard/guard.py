@@ -494,11 +494,6 @@ class AuraGuard:
                         reason=f"policy_missing_args:{','.join(sorted(missing))}",
                     )
 
-        # Store request signature in rolling window
-        state.tool_stream.append(sig)
-        if len(state.tool_stream) > self.cfg.tool_loop_window:
-            state.tool_stream = state.tool_stream[-self.cfg.tool_loop_window:]
-
         # ──────────────────────────────────────────
         # Early cache checks (must run before budget)
         # ──────────────────────────────────────────
@@ -529,35 +524,40 @@ class AuraGuard:
                     cached_result=cached2,
                 )
 
+        # +1 because the current call is not yet in tool_stream (appended only on ALLOW)
         repeats = sum(
             1 for s in state.tool_stream if s.name == tool and s.args_sig == args_sig
-        )
-        if repeats >= self.cfg.repeat_toolcall_threshold:
-            cache_key = (tool, args_sig)
-            if cache_key in state.result_cache and self._cache_valid(state, cache_key):
-                cached = state.result_cache[cache_key]
-                cached2 = ToolResult(
-                    ok=cached.ok,
-                    payload=cached.payload,
-                    error_code=cached.error_code,
-                    payload_sig=cached.payload_sig,
-                    cached=True,
-                    side_effect_executed=cached.side_effect_executed,
-                )
-                est = self.estimate_tool_cost(tool)
-                self._emit(
-                    "tool_call_cache_hit",
-                    state=state,
-                    tool=tool,
-                    args_sig=args_sig,
-                    repeats=repeats,
-                    estimated_cost_avoided=round(est, 4),
-                )
-                return PolicyDecision(
-                    action=PolicyAction.CACHE,
-                    reason="identical_toolcall_loop_cache",
-                    cached_result=cached2,
-                )
+        ) + 1
+
+        # Generic repeat cache is for non-side-effect tools only.
+        # Side-effect tools use the ticket-scoped idempotency ledger (above).
+        if not is_side_effect:
+            if repeats >= self.cfg.repeat_toolcall_threshold:
+                cache_key = (tool, args_sig)
+                if cache_key in state.result_cache and self._cache_valid(state, cache_key):
+                    cached = state.result_cache[cache_key]
+                    cached2 = ToolResult(
+                        ok=cached.ok,
+                        payload=cached.payload,
+                        error_code=cached.error_code,
+                        payload_sig=cached.payload_sig,
+                        cached=True,
+                        side_effect_executed=cached.side_effect_executed,
+                    )
+                    est = self.estimate_tool_cost(tool)
+                    self._emit(
+                        "tool_call_cache_hit",
+                        state=state,
+                        tool=tool,
+                        args_sig=args_sig,
+                        repeats=repeats,
+                        estimated_cost_avoided=round(est, 4),
+                    )
+                    return PolicyDecision(
+                        action=PolicyAction.CACHE,
+                        reason="identical_toolcall_loop_cache",
+                        cached_result=cached2,
+                    )
 
         # ──────────────────────────────────────────
         # Primitive 6: Cost budget enforcement
@@ -680,7 +680,7 @@ class AuraGuard:
         # ──────────────────────────────────────────
         # Primitive 1: Identical tool-call loop
         # ──────────────────────────────────────────
-        if repeats >= self.cfg.repeat_toolcall_threshold:
+        if not is_side_effect and repeats >= self.cfg.repeat_toolcall_threshold:
             self._emit(
                 "identical_toolcall_loop_block",
                 state=state,
@@ -754,6 +754,14 @@ class AuraGuard:
         if seq_decision is not None:
             return seq_decision
 
+        # All checks passed — count the executed call
+        state.tool_call_counts[tool] = state.tool_call_counts.get(tool, 0) + 1
+
+        # Store request signature in rolling window (only for calls that pass all checks)
+        state.tool_stream.append(sig)
+        if len(state.tool_stream) > self.cfg.tool_loop_window:
+            state.tool_stream = state.tool_stream[-self.cfg.tool_loop_window:]
+
         return PolicyDecision(action=PolicyAction.ALLOW, reason="allow")
 
     def _check_tool_call_cap(self, state: GuardState, tool: str) -> Optional[PolicyDecision]:
@@ -791,7 +799,6 @@ class AuraGuard:
                 injected_system=injected,
             )
 
-        state.tool_call_counts[tool] = count + 1
         return None
 
     def _check_sequence_loop(self, state: GuardState, tool: str) -> Optional[PolicyDecision]:
@@ -805,8 +812,8 @@ class AuraGuard:
         if not self.cfg.sequence_detection_enabled:
             return None
 
-        # Extract tool names from the rolling stream
-        names = [s.name for s in state.tool_stream]
+        # Extract tool names from executed history + current candidate call
+        names = [s.name for s in state.tool_stream] + [tool]
         n = len(names)
 
         # Check each pattern length from 2 up to max_sequence_length
@@ -866,6 +873,11 @@ class AuraGuard:
         args_sig = _args_sig(self.cfg, call.args, tool_name=tool)
         t_sig = _ticket_sig(self.cfg, call.ticket_id, state.run_id)
 
+        # Defensive copy: prevent caller mutation from affecting cached entries.
+        # We do NOT deep-copy payload (could be large); only the ToolResult wrapper.
+        from dataclasses import replace as _dc_replace
+        result = _dc_replace(result)
+
         # Fill payload signature if missing
         if result.payload_sig is None and result.payload is not None:
             result.payload_sig = _payload_sig(self.cfg, result.payload)
@@ -874,8 +886,10 @@ class AuraGuard:
         if result.side_effect_executed is None:
             result.side_effect_executed = bool(side_effect and result.ok and not result.cached)
 
-        # Cache successful non-cached results (respecting never_cache_tools)
-        if result.ok and not result.cached and self.cfg.is_cacheable(tool):
+        # Cache successful non-cached results (respecting never_cache_tools).
+        # Side-effect results go ONLY into the idempotency ledger (below),
+        # not into the generic cache — prevents cross-ticket false suppression.
+        if result.ok and not result.cached and self.cfg.is_cacheable(tool) and not side_effect:
             # Enforce state growth cap on result_cache
             if len(state.result_cache) < self.cfg.max_cache_entries:
                 state.result_cache[(tool, args_sig)] = result

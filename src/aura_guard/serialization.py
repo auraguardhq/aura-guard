@@ -58,7 +58,7 @@ def state_to_json(state: GuardState) -> str:
 
         # Arg jitter history (already HMAC'd, safe to persist)
         "tool_query_sigs": {
-            tool: [sorted(sig_set) for sig_set in sigs[-12:]]
+            tool: [sorted(sig_set) for sig_set in sigs]
             for tool, sigs in state.tool_query_sigs.items()
         },
 
