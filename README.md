@@ -527,18 +527,6 @@ For architecture details, see docs/ARCHITECTURE.md.
 
 ---
 
-## Roadmap
-
-| Version | What | Status |
-|---------|------|--------|
-| ~~v0.5.1~~ | Cross-review fixes (P0 cache bug, MCP fixes, docs) | Shipped |
-| **v0.6.0** | MCP adapter v2 (session isolation, ticket propagation) | Next |
-| **v0.7.0** | Enhanced stall detection (diminishing returns, tool diversity) | Planned |
-| **v0.8.0** | SQLite + Redis persistence backends | Planned |
-| **v1.0.0** | Cross-agent guard (WorkflowGuard) | Planned |
-
----
-
 ## Docs
 
 - **[`docs/QUICKSTART.md`](docs/QUICKSTART.md) — get started in 5 minutes**
