@@ -6,10 +6,13 @@ This creates an MCP-compatible tool server where every tool call
 is automatically protected by AuraGuard. Loop detection, duplicate
 side-effect prevention, cost budgets — all enforced automatically.
 
-Run:
+Run (stdio — single client):
     python examples/mcp_guarded_server.py
 
-Then connect from any MCP client (Claude Desktop, Cursor, etc.):
+Run (HTTP — multiple clients):
+    python examples/mcp_guarded_server.py --http
+
+Connect from any MCP client (Claude Desktop, Cursor, etc.):
     {
         "mcpServers": {
             "support": {
@@ -21,25 +24,33 @@ Then connect from any MCP client (Claude Desktop, Cursor, etc.):
 """
 
 import json
-import os
 import sys
+import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 try:
     from aura_guard.adapters.mcp_adapter import GuardedMCP
 except ImportError:
-    print("ERROR: pip install mcp aura-guard")
+    print("ERROR: pip install mcp aura-guard", file=sys.stderr)
     sys.exit(1)
 
 
+# Detect transport mode from CLI args
+use_http = "--http" in sys.argv
+
 # Create a guarded MCP server
+# - stdio: single session (one client)
+# - http: per_session (each client gets independent guard state)
 mcp = GuardedMCP(
     "Customer Support",
     secret_key=b"example-mcp-server-key",
     side_effect_tools={"refund", "send_email"},
     max_cost_per_run=0.50,
     max_calls_per_tool=5,
+    session_mode="per_session" if use_http else "single",
+    max_sessions=50,
+    session_ttl_seconds=1800,
 )
 
 
@@ -94,9 +105,10 @@ def send_email(to: str, subject: str, body: str) -> str:
 
 
 if __name__ == "__main__":
-    import sys
+    transport = "streamable-http" if use_http else "stdio"
     # MCP stdio uses stdout for JSON-RPC — never print() to stdout.
-    print("Starting guarded MCP server (stdio)...", file=sys.stderr)
-    print(f"Guard config: max_cost={mcp.guard.cost_limit}, max_calls_per_tool=5", file=sys.stderr)
-    print("Side-effect tools: refund, send_email", file=sys.stderr)
-    mcp.run(transport="stdio")
+    print(f"Starting guarded MCP server ({transport})...", file=sys.stderr)
+    print(f"Session mode: {mcp.session_mode}", file=sys.stderr)
+    print(f"Guard config: max_cost=0.50, max_calls_per_tool=5", file=sys.stderr)
+    print(f"Side-effect tools: refund, send_email", file=sys.stderr)
+    mcp.run(transport=transport)

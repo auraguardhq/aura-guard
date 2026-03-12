@@ -1197,6 +1197,777 @@ class TestMCPAdapter:
 
     def test_import_without_mcp_raises(self):
         """GuardedMCP should raise ImportError if mcp is not installed."""
+        from aura_guard.adapters import mcp_adapter
+        if not mcp_adapter.HAS_MCP:
+            with pytest.raises(ImportError, match="mcp"):
+                mcp_adapter.GuardedMCP("test", secret_key=b"test-key")
+
+    def test_guard_wrapping_logic_sync(self):
+        """Test that the guard check/execute/record cycle works correctly."""
+        from aura_guard import AgentGuard, PolicyAction
+
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+        def search_kb(query):
+            return {"results": [query]}
+
+        tool_name = "search_kb"
+        kwargs = {"query": "refund policy"}
+
+        decision = guard.check_tool(tool_name, args=kwargs)
+        assert decision.action == PolicyAction.ALLOW
+
+        result = search_kb(**kwargs)
+        guard.record_result(ok=True, payload=result)
+        assert result == {"results": ["refund policy"]}
+        assert guard.tool_calls_executed == 1
+
+    def test_guard_blocks_duplicate_side_effect(self):
+        """Test that side-effect dedup works as it would in MCP context."""
+        from aura_guard import AgentGuard, PolicyAction
+
+        guard = AgentGuard(
+            secret_key=b"test-secret-key",
+            side_effect_tools={"refund"},
+        )
+
+        d1 = guard.check_tool("refund", args={"order_id": "o1", "amount": 50}, ticket_id="t1")
+        assert d1.action == PolicyAction.ALLOW
+        guard.record_result(ok=True, payload={"status": "refunded"})
+
+        d2 = guard.check_tool("refund", args={"order_id": "o1", "amount": 50}, ticket_id="t1")
+        assert d2.action == PolicyAction.CACHE
+
+    def test_guard_denied_produces_error_string(self):
+        """Test that GuardDenied can be formatted as an MCP error message."""
+        from aura_guard.middleware import GuardDenied
+        from aura_guard.types import PolicyAction, PolicyDecision
+
+        decision = PolicyDecision(
+            action=PolicyAction.BLOCK,
+            reason="side_effect_limit_exceeded",
+        )
+        exc = GuardDenied(decision)
+
+        error_msg = f"[AURA GUARD] {exc.action.value.upper()}: {exc.reason}"
+        assert "[AURA GUARD] BLOCK: side_effect_limit_exceeded" == error_msg
+
+    def test_guard_stats_accessible(self):
+        """Test that guard stats are accessible."""
+        from aura_guard import AgentGuard
+
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+        guard.check_tool("search_kb", args={"query": "test"})
+        guard.record_result(ok=True, payload="results")
+
+        stats = guard.stats
+        assert stats["tool_calls_executed"] == 1
+        assert stats["cost_spent_usd"] > 0
+
+    def test_guard_reset(self):
+        """Test that guard can be reset between MCP sessions."""
+        from aura_guard import AgentGuard
+
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+        guard.check_tool("search_kb", args={"query": "test"})
+        guard.record_result(ok=True, payload="results")
+        assert guard.tool_calls_executed == 1
+
+        guard.reset()
+        assert guard.tool_calls_executed == 0
+        assert guard.cost_spent == 0
+
+    def test_session_registry_isolation(self):
+        """Test that _SessionRegistry gives different guards per session."""
+        from aura_guard import AgentGuard
+        from aura_guard.adapters.mcp_adapter import _SessionRegistry
+
+        registry = _SessionRegistry(
+            guard_factory=lambda: AgentGuard(secret_key=b"test-key", max_cost_per_run=1.00),
+            max_sessions=10,
+            session_ttl_seconds=60,
+        )
+
+        guard_a = registry.get("session-A")
+        guard_b = registry.get("session-B")
+
+        # Different guard instances
+        assert guard_a is not guard_b
+
+        # Same session returns same guard
+        assert registry.get("session-A") is guard_a
+
+        # State is independent
+        guard_a.check_tool("search", args={"q": "test"})
+        guard_a.record_result(ok=True)
+        assert guard_a.tool_calls_executed == 1
+        assert guard_b.tool_calls_executed == 0
+
+    def test_session_registry_max_sessions(self):
+        """Test that registry evicts oldest session when at capacity."""
+        from aura_guard import AgentGuard
+        from aura_guard.adapters.mcp_adapter import _SessionRegistry
+
+        registry = _SessionRegistry(
+            guard_factory=lambda: AgentGuard(secret_key=b"test-key"),
+            max_sessions=3,
+            session_ttl_seconds=60,
+        )
+
+        g1 = registry.get("s1")
+        g2 = registry.get("s2")
+        g3 = registry.get("s3")
+        assert registry.active_session_count == 3
+
+        # Adding s4 should evict s1 (oldest)
+        g4 = registry.get("s4")
+        assert registry.active_session_count == 3
+        assert registry.get("s4") is g4
+        # s1 was evicted — new guard
+        g1_new = registry.get("s1")
+        assert g1_new is not g1
+
+    def test_session_registry_reset_all(self):
+        """Test that reset_all clears all sessions."""
+        from aura_guard import AgentGuard
+        from aura_guard.adapters.mcp_adapter import _SessionRegistry
+
+        registry = _SessionRegistry(
+            guard_factory=lambda: AgentGuard(secret_key=b"test-key"),
+            max_sessions=10,
+            session_ttl_seconds=60,
+        )
+
+        registry.get("s1")
+        registry.get("s2")
+        assert registry.active_session_count == 2
+
+        registry.reset_all()
+        assert registry.active_session_count == 0
+
+    def test_session_mode_validation(self):
+        """Test that invalid session_mode raises ValueError."""
+        from aura_guard.adapters import mcp_adapter
+        if not mcp_adapter.HAS_MCP:
+            pytest.skip("mcp not installed")
+        with pytest.raises(ValueError, match="session_mode"):
+            mcp_adapter.GuardedMCP("test", secret_key=b"k", session_mode="invalid")
+
+
+class TestAsyncConvenienceAPI:
+    def test_async_run(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+            async def async_search(query):
+                return {"results": [query]}
+
+            result = await g.run("search_kb", async_search, query="test")
+            assert result == {"results": ["test"]}
+            assert g.stats["tool_calls_executed"] == 1
+
+        asyncio.run(_test())
+
+    def test_async_run_sync_fn(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+            def sync_search(query):
+                return {"results": [query]}
+
+            result = await g.run("search_kb", sync_search, query="test")
+            assert result == {"results": ["test"]}
+
+        asyncio.run(_test())
+
+    def test_async_protect_decorator(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+            @g.protect
+            async def search_kb(query):
+                return {"hits": [query]}
+
+            result = await search_kb(query="test")
+            assert result == {"hits": ["test"]}
+
+        asyncio.run(_test())
+
+    def test_async_protect_rejects_positional_args(self):
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _test():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key")
+
+            @g.protect
+            async def search_kb(query):
+                return query
+
+            with pytest.raises(TypeError, match="keyword arguments only"):
+                await search_kb("positional")
+
+        asyncio.run(_test())
+
+
+# ─────────────────────────────────────
+# Serialization
+# ─────────────────────────────────────
+
+class TestSerialization:
+    def test_roundtrip(self, guard, state):
+        from aura_guard.serialization import state_to_json, state_from_json
+
+        # Do some operations
+        call = ToolCall(name="search_kb", args={"query": "test"})
+        guard.on_tool_call_request(state=state, call=call)
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        # Serialize
+        json_str = state_to_json(state)
+        assert isinstance(json_str, str)
+        assert "test-run" in json_str
+
+        # Deserialize
+        restored = state_from_json(json_str)
+        assert restored.run_id == state.run_id
+        assert restored.cumulative_cost == state.cumulative_cost
+        assert len(restored.tool_stream) == len(state.tool_stream)
+
+    def test_state_from_json_generates_run_id_when_missing(self):
+        from aura_guard.serialization import state_from_json
+
+        payload = {
+            "version": 4,
+            "tool_stream": [],
+        }
+
+        restored = state_from_json(json.dumps(payload))
+        assert isinstance(restored.run_id, str)
+        assert len(restored.run_id) == 32
+
+    def test_state_from_json_rejects_missing_or_old_version(self):
+        from aura_guard.serialization import state_from_json
+
+        with pytest.raises(ValueError, match="Incompatible state format"):
+            state_from_json(json.dumps({"run_id": "abc123"}))
+
+        with pytest.raises(ValueError, match="Incompatible state format"):
+            state_from_json(json.dumps({"version": 3, "run_id": "abc123"}))
+
+    def test_dict_roundtrip(self, guard, state):
+        from aura_guard.serialization import state_to_dict, state_from_dict
+
+        call = ToolCall(name="search_kb", args={"query": "test"})
+        guard.on_tool_call_request(state=state, call=call)
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        d = state_to_dict(state)
+        assert isinstance(d, dict)
+        assert d["run_id"] == "test-run"
+
+        restored = state_from_dict(d)
+        assert restored.run_id == state.run_id
+
+
+class TestIdempotencyLedgerSerialization:
+    def test_idempotency_survives_serialization(self):
+        from aura_guard.serialization import state_from_json, state_to_json
+
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", side_effect_tools={"refund"})
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state(run_id="idempotency-serialize")
+
+        call = ToolCall(name="refund", args={"order_id": "o1", "amount": 10}, ticket_id="t1")
+        decision = guard.on_tool_call_request(state=state, call=call)
+        assert decision.action == PolicyAction.ALLOW
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload="refunded"))
+
+        restored = state_from_json(state_to_json(state))
+
+        replay = guard.on_tool_call_request(state=restored, call=call)
+        assert replay.action == PolicyAction.CACHE
+        assert replay.cached_result is not None
+        assert replay.cached_result.payload is None
+
+    def test_idempotency_serialization_backward_compat(self):
+        from aura_guard.serialization import state_from_json
+
+        payload = {
+            "version": 4,
+            "run_id": "compat-v4",
+            "tool_stream": [],
+            "tool_query_sigs": {},
+            "quarantined_tools": {},
+            "error_streaks": {},
+            "attempted_side_effect_calls": {},
+            "executed_side_effect_calls": {},
+            "tool_call_counts": {},
+            "stall_streak": 0,
+            "stall_pattern_streak": 0,
+            "stall_rewrite_attempts": 0,
+            "last_assistant_token_sigs": None,
+            "last_progress_marker": [0, 0],
+            "unique_tool_calls_seen": [],
+            "unique_tool_results_seen": [],
+            "cumulative_cost": 0.0,
+            "reported_token_cost": 0.0,
+            "budget_warning_emitted": False,
+            "cost_events": [],
+        }
+
+        state = state_from_json(json.dumps(payload))
+        assert state.run_id == "compat-v4"
+        assert state.idempotency_ledger == {}
+
+
+class TestSerializationFidelity:
+    def test_state_roundtrip_preserves_decision_behavior(self):
+        from aura_guard.serialization import state_from_json, state_to_json
+
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", 
+            cost_model=CostModel(default_tool_call_cost=0.01),
+            max_cost_per_run=None,
+            side_effect_tools={"refund"},
+            side_effect_max_executed_per_run=1,
+            repeat_toolcall_threshold=2,
+            error_retry_threshold=2,
+        )
+        guard = AuraGuard(config=cfg)
+        original_state = guard.new_state(run_id="serialization-fidelity")
+
+        def run_sequence(sequence, state):
+            decisions = []
+            for call, result in sequence:
+                decision = guard.on_tool_call_request(state=state, call=call)
+                decisions.append(decision)
+                if decision.action == PolicyAction.ALLOW and result is not None:
+                    guard.on_tool_result(state=state, call=call, result=result)
+            return decisions
+
+        initial_sequence = [
+            (ToolCall(name="get_order", args={"order_id": "o1"}), ToolResult(ok=True, payload="order:o1:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o1"}), ToolResult(ok=True, payload="order:o1:v2")),
+            (ToolCall(name="get_order", args={"order_id": "o1"}), None),
+            (ToolCall(name="refund", args={"order_id": "o1", "amount": 10}, ticket_id="t1"), ToolResult(ok=True, payload="refunded:o1")),
+            (ToolCall(name="refund", args={"order_id": "o1", "amount": 10}, ticket_id="t1"), None),
+            (ToolCall(name="refund", args={"order_id": "o2", "amount": 20}, ticket_id="t2"), None),
+            (ToolCall(name="flaky_api", args={"req": "a"}), ToolResult(ok=False, error_code="429")),
+            (ToolCall(name="flaky_api", args={"req": "b"}), ToolResult(ok=False, error_code="429")),
+            (ToolCall(name="flaky_api", args={"req": "c"}), None),
+            (ToolCall(name="get_order", args={"order_id": "o2"}), ToolResult(ok=True, payload="order:o2:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o2"}), ToolResult(ok=True, payload="order:o2:v2")),
+        ]
+        run_sequence(initial_sequence, original_state)
+
+        restored_state = state_from_json(state_to_json(original_state))
+
+        additional_sequence = [
+            (ToolCall(name="flaky_api", args={"req": "d"}), None),
+            (ToolCall(name="refund", args={"order_id": "o3", "amount": 30}, ticket_id="t3"), None),
+            (ToolCall(name="refund", args={"order_id": "o4", "amount": 40}, ticket_id="t4"), None),
+            (ToolCall(name="get_order", args={"order_id": "o4"}), ToolResult(ok=True, payload="order:o4:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o4"}), None),
+            (ToolCall(name="get_order", args={"order_id": "o5"}), ToolResult(ok=True, payload="order:o5:v1")),
+            (ToolCall(name="get_order", args={"order_id": "o5"}), None),
+        ]
+
+        original_decisions = run_sequence(additional_sequence, original_state)
+        restored_decisions = run_sequence(additional_sequence, restored_state)
+
+        assert len(original_decisions) == len(restored_decisions)
+        for original, restored in zip(original_decisions, restored_decisions):
+            assert original.action == restored.action
+            assert original.reason == restored.reason
+
+
+# ─────────────────────────────────────
+# Telemetry
+# ─────────────────────────────────────
+
+class TestTelemetry:
+    def test_inmemory_telemetry(self, guard, state, telemetry):
+        call = ToolCall(name="refund", args={"order_id": "o1"}, ticket_id="t1")
+        d1 = guard.on_tool_call_request(state=state, call=call)
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        # Second refund should be blocked
+        d2 = guard.on_tool_call_request(state=state, call=call)
+
+        # Should have telemetry events
+        assert len(telemetry.events) > 0
+
+    def test_cost_saved_tracking(self, telemetry):
+        telemetry.emit({"event": "test", "estimated_cost_avoided": 0.04})
+        telemetry.emit({"event": "test", "estimated_cost_avoided": 0.08})
+        assert telemetry.cost_saved == 0.12
+
+    def test_find_events(self, telemetry):
+        telemetry.emit({"event": "foo"})
+        telemetry.emit({"event": "bar"})
+        telemetry.emit({"event": "foo"})
+        assert len(telemetry.find("foo")) == 2
+        assert len(telemetry.find("bar")) == 1
+
+
+class TestSequenceLoopDetection:
+    """Tests for Primitive 8: multi-tool sequence loop detection."""
+
+    def test_detects_ping_pong_loop(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        decisions = []
+        for t in ["agent_a", "agent_b", "agent_a", "agent_b"]:
+            call = ToolCall(name=t, args={"task": f"do {t} work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            decisions.append(d)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload=f"result_{t}"))
+
+        assert PolicyAction.REWRITE in [d.action for d in decisions]
+        rewrite_decisions = [d for d in decisions if d.action == PolicyAction.REWRITE]
+        assert any("sequence_loop" in d.reason for d in rewrite_decisions)
+
+    def test_detects_three_tool_cycle(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        decisions = []
+        for t in ["triage", "research", "action", "triage", "research", "action"]:
+            call = ToolCall(name=t, args={"task": "work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            decisions.append(d)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload="ok"))
+
+        assert PolicyAction.REWRITE in [d.action for d in decisions]
+
+    def test_no_false_positive_on_varied_tools(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        for t in ["search", "get_order", "check_status", "send_email", "update_ticket"]:
+            call = ToolCall(name=t, args={"id": "123"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            assert d.action == PolicyAction.ALLOW, f"Tool {t} should be allowed, got {d.action}"
+            guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+    def test_disabled_when_config_false(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_detection_enabled=False)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        i = 0
+        for _ in range(3):
+            for t in ["agent_a", "agent_b"]:
+                i += 1
+                call = ToolCall(name=t, args={"task": f"work-{i}"})
+                d = guard.on_tool_call_request(state=state, call=call)
+                assert d.action == PolicyAction.ALLOW
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+    def test_quarantines_tool_on_detection(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        for t in ["agent_a", "agent_b", "agent_a", "agent_b"]:
+            call = ToolCall(name=t, args={"task": "work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        assert any("sequence_loop" in v for v in state.quarantined_tools.values())
+
+    def test_threshold_3_requires_three_repeats(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=3, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        i = 0
+        for t in ["agent_a", "agent_b", "agent_a", "agent_b"]:
+            i += 1
+            call = ToolCall(name=t, args={"task": f"work-{i}"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            assert d.action == PolicyAction.ALLOW, "2x repeat should not trigger with threshold=3"
+            guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        triggered = False
+        for t in ["agent_a", "agent_b"]:
+            i += 1
+            call = ToolCall(name=t, args={"task": f"work-{i}"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            if d.action == PolicyAction.REWRITE:
+                triggered = True
+                break
+            guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        assert triggered, "3rd repeat should trigger with threshold=3"
+
+    def test_rewrite_includes_pattern_in_reason(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=2, max_sequence_length=4)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        decisions = []
+        for t in ["coordinator", "worker", "coordinator", "worker"]:
+            call = ToolCall(name=t, args={"task": "work"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            decisions.append(d)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        rewrite_decisions = [d for d in decisions if d.action == PolicyAction.REWRITE]
+        assert rewrite_decisions
+        assert any("coordinator" in d.reason or "worker" in d.reason for d in rewrite_decisions)
+
+    def test_config_validation(self):
+        with pytest.raises(ValueError, match="sequence_repeat_threshold must be >= 2"):
+            AuraGuardConfig(secret_key=b"test-secret-key", sequence_repeat_threshold=1)
+
+        with pytest.raises(ValueError, match="max_sequence_length must be >= 2"):
+            AuraGuardConfig(secret_key=b"test-secret-key", max_sequence_length=1)
+
+
+# ─────────────────────────────────────
+# OpenAI Adapter
+# ─────────────────────────────────────
+
+class TestOpenAIAdapter:
+    def test_extract_tool_calls(self):
+        from aura_guard.adapters.openai_adapter import extract_tool_calls_from_chat_completion
+
+        resp = {
+            "choices": [{
+                "message": {
+                    "tool_calls": [{
+                        "function": {
+                            "name": "search_kb",
+                            "arguments": '{"query": "test"}',
+                        }
+                    }]
+                }
+            }]
+        }
+        calls = extract_tool_calls_from_chat_completion(resp, ticket_id="t1")
+        assert len(calls) == 1
+        assert calls[0].name == "search_kb"
+        assert calls[0].args["query"] == "test"
+        assert calls[0].ticket_id == "t1"
+
+    def test_extract_assistant_text(self):
+        from aura_guard.adapters.openai_adapter import extract_assistant_text
+
+        resp = {"choices": [{"message": {"content": "Hello world"}}]}
+        assert extract_assistant_text(resp) == "Hello world"
+
+    def test_inject_system_message(self):
+        from aura_guard.adapters.openai_adapter import inject_system_message
+
+        messages = [{"role": "user", "content": "hi"}]
+        result = inject_system_message(messages, "You are a bot")
+        assert result[0]["role"] == "system"
+        assert result[0]["content"] == "You are a bot"
+        assert len(result) == 2
+
+    def test_inject_replaces_existing_system(self):
+        from aura_guard.adapters.openai_adapter import inject_system_message
+
+        messages = [
+            {"role": "system", "content": "old"},
+            {"role": "user", "content": "hi"},
+        ]
+        result = inject_system_message(messages, "new")
+        assert result[0]["content"] == "new"
+        assert len(result) == 2
+
+
+# ─────────────────────────────────────
+# Run Summary
+# ─────────────────────────────────────
+
+class TestRunSummary:
+    def test_get_run_summary(self, guard, state):
+        call = ToolCall(name="search_kb", args={"query": "test"})
+        guard.on_tool_call_request(state=state, call=call)
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True))
+
+        summary = guard.get_run_summary(state)
+        assert summary["run_id"] == "test-run"
+        assert summary["cumulative_cost_usd"] > 0
+        assert summary["unique_tool_calls"] == 1
+
+
+# ─────────────────────────────────────
+# Shadow Mode
+# ─────────────────────────────────────
+
+class TestShadowMode:
+    def test_shadow_allows_everything(self):
+        g = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=0.10, shadow_mode=True, default_tool_cost=0.04)
+        # Execute 5 identical calls — normally would trigger block/cache
+        for _ in range(5):
+            d = g.check_tool("search_kb", args={"query": "test"})
+            assert d.action == PolicyAction.ALLOW
+            g.record_result(ok=True, payload="results")
+
+        assert g.shadow_would_deny > 0
+        assert g.blocks == 0
+        assert g.cache_hits == 0
+        assert g.stats["shadow_mode"] is True
+
+    def test_shadow_counts_would_deny(self):
+        g = AgentGuard(secret_key=b"test-secret-key", 
+            max_cost_per_run=0.50,
+            side_effect_tools={"refund"},
+            shadow_mode=True,
+        )
+        # First refund — allowed
+        d1 = g.check_tool("refund", args={"order_id": "o1"}, ticket_id="t1")
+        assert d1.action == PolicyAction.ALLOW
+        g.record_result(ok=True, payload="refunded")
+
+        # Second refund, same args — would be CACHE in enforcement mode
+        d2 = g.check_tool("refund", args={"order_id": "o1"}, ticket_id="t1")
+        assert d2.action == PolicyAction.ALLOW  # shadow: still allowed
+        assert g.shadow_would_deny == 1
+
+    def test_shadow_stall_not_enforced(self):
+        g = AgentGuard(secret_key=b"test-secret-key", shadow_mode=True)
+        text = "I apologize for the inconvenience. We're looking into it."
+        for _ in range(10):
+            d = g.check_output(text)
+            assert d is None  # shadow mode: never intervenes on output
+        assert g.shadow_would_deny > 0
+
+
+# ─────────────────────────────────────
+# Async Guard
+# ─────────────────────────────────────
+
+class TestAsyncGuard:
+    def test_async_import(self):
+        from aura_guard import AsyncAgentGuard
+        g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+        assert g.cost_spent == 0
+
+    def test_async_sync_parity(self):
+        """AsyncAgentGuard should produce identical results to AgentGuard."""
+        import asyncio
+        from aura_guard import AsyncAgentGuard
+
+        async def _run():
+            g = AsyncAgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+            d = await g.check_tool("search_kb", args={"query": "test"})
+            assert d.action == PolicyAction.ALLOW
+            await g.record_result(ok=True, payload="results")
+            assert g.cost_spent > 0
+            stall = await g.check_output("Normal response text.")
+            assert stall is None
+            return g.stats
+
+        stats = asyncio.run(_run())
+        assert stats["cost_spent_usd"] > 0
+
+
+# ─────────────────────────────────────
+# Secret key enforcement
+# ─────────────────────────────────────
+
+class TestSecretKeyEnforcement:
+    def test_default_key_allowed_in_shadow_mode(self):
+        AuraGuard(config=AuraGuardConfig(shadow_mode=True))
+
+    def test_default_key_rejected_in_enforcement_mode(self):
+        with pytest.raises(ValueError, match="default development secret_key"):
+            AuraGuard(config=AuraGuardConfig(shadow_mode=False))
+
+    @pytest.mark.parametrize("shadow_mode", [True, False])
+    def test_custom_key_allowed_in_both_modes(self, shadow_mode):
+        AuraGuard(config=AuraGuardConfig(secret_key=b"my-production-key", shadow_mode=shadow_mode))
+
+
+class TestCoreShadowMode:
+    """Test that shadow_mode works in the core AuraGuard engine, not just the AgentGuard wrapper."""
+
+    def test_shadow_mode_suppresses_block_in_core(self):
+        """on_tool_call_request returns ALLOW when shadow_mode=True, even if the tool would be blocked."""
+        from aura_guard.config import ToolPolicy, ToolAccess
+
+        cfg = AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            shadow_mode=True,
+            tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY, deny_reason="not allowed")},
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        call = ToolCall(name="forbidden", args={"x": 1})
+        decision = guard.on_tool_call_request(state=state, call=call)
+        assert decision.action == PolicyAction.ALLOW
+        assert decision.reason == "shadow_allow"
+
+    def test_shadow_mode_suppresses_stall_in_core(self):
+        """on_llm_output returns None when shadow_mode=True, even if stall is detected."""
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", shadow_mode=True)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        text = "I apologize for the inconvenience. We're looking into it."
+        for _ in range(10):
+            decision = guard.on_llm_output(state=state, text=text)
+            assert decision is None  # shadow mode: never intervenes
+
+    def test_shadow_mode_false_still_enforces_in_core(self):
+        """Verify enforcement still works when shadow_mode=False."""
+        from aura_guard.config import ToolPolicy, ToolAccess
+
+        cfg = AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            shadow_mode=False,
+            tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY)},
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        call = ToolCall(name="forbidden", args={"x": 1})
+        decision = guard.on_tool_call_request(state=state, call=call)
+        assert decision.action == PolicyAction.BLOCK
+
+
+class TestCostEventsCap:
+    def test_cost_events_bounded_by_max(self):
+        cfg = AuraGuardConfig(secret_key=b"test-secret-key", max_cost_events=5)
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        for i in range(10):
+            call = ToolCall(name="search", args={"q": f"query_{i}"})
+            d = guard.on_tool_call_request(state=state, call=call)
+            if d.action == PolicyAction.ALLOW:
+                guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload=f"r{i}"))
+
+        assert len(state.cost_events) <= 5
+
+
+class TestMCPAdapter:
+    """Tests for the MCP adapter (without requiring the mcp package)."""
+
+    def test_import_without_mcp_raises(self):
+        """GuardedMCP should raise ImportError if mcp is not installed."""
         # We test the adapter's guard logic by mocking, not by importing mcp.
         # This test verifies the error message when mcp is missing.
         from aura_guard.adapters import mcp_adapter

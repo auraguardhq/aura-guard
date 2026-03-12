@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.6.0 — 2026-03-12
+
+### New Features
+- **MCP adapter v2 with session isolation.** `GuardedMCP` now supports `session_mode="per_session"` for HTTP/SSE transport. Each connected client gets an independent `AgentGuard` with its own loop detection, cost budgets, idempotency ledger, and quarantine state. No more cross-client state bleed.
+- **Session registry** with configurable `max_sessions` (default 100) and `session_ttl_seconds` (default 3600). Idle sessions are cleaned up lazily. Oldest sessions are evicted when at capacity.
+- **Custom session ID function** via `session_id_fn` parameter for advanced session scoping.
+- `session_mode="single"` (default) preserves backward-compatible behavior for stdio transport.
+- Updated example with `--http` flag to demonstrate multi-client mode.
+
 ## 0.5.1 — 2026-03-12
 
 ### Fixes (from ChatGPT Pro deep audit)

@@ -105,10 +105,15 @@ Videos: [Without guard](https://youtu.be/FkBsRK6OS-4) | [With guard](https://you
 
 **mcp_guarded_server.py**
 Creates an MCP-compatible tool server where every tool call is automatically
-protected by AuraGuard. Connect from any MCP client (Claude Desktop, Cursor, etc.).
+protected by AuraGuard. Supports both single-client (stdio) and multi-client (HTTP) modes.
 ```bash
 pip install mcp aura-guard
+
+# Single client (stdio):
 python examples/mcp_guarded_server.py
+
+# Multiple clients (HTTP with session isolation):
+python examples/mcp_guarded_server.py --http
 ```
 
 Connect from Claude Desktop or Cursor:
@@ -122,3 +127,7 @@ Connect from Claude Desktop or Cursor:
     }
 }
 ```
+
+Session modes:
+- `session_mode="single"` — one shared guard (stdio, one client)
+- `session_mode="per_session"` — each client gets independent guard state (HTTP, multiple clients)
