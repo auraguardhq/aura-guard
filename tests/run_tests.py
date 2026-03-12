@@ -967,6 +967,52 @@ def _():
     AuraGuard(config=AuraGuardConfig(secret_key=b"my-production-key-1234"))
 
 
+print("\n=== MCP Adapter ===")
+
+@test("MCP guard wrapping logic works")
+def _():
+    guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+    def search_kb(query):
+        return {"results": [query]}
+
+    d = guard.check_tool("search_kb", args={"query": "test"})
+    assert d.action == PolicyAction.ALLOW
+    result = search_kb(query="test")
+    guard.record_result(ok=True, payload=result)
+    assert guard.tool_calls_executed == 1
+
+@test("MCP side-effect dedup works")
+def _():
+    guard = AgentGuard(secret_key=b"test-secret-key", side_effect_tools={"refund"})
+
+    d1 = guard.check_tool("refund", args={"order_id": "o1"}, ticket_id="t1")
+    assert d1.action == PolicyAction.ALLOW
+    guard.record_result(ok=True, payload="refunded")
+
+    d2 = guard.check_tool("refund", args={"order_id": "o1"}, ticket_id="t1")
+    assert d2.action == PolicyAction.CACHE
+
+@test("MCP guard denied error format")
+def _():
+    from aura_guard.middleware import GuardDenied
+    from aura_guard.types import PolicyDecision
+
+    d = PolicyDecision(action=PolicyAction.BLOCK, reason="test_block")
+    exc = GuardDenied(d)
+    msg = f"[AURA GUARD] {exc.action.value.upper()}: {exc.reason}"
+    assert msg == "[AURA GUARD] BLOCK: test_block"
+
+@test("MCP guard reset between sessions")
+def _():
+    guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+    guard.check_tool("search", args={"q": "test"})
+    guard.record_result(ok=True)
+    assert guard.tool_calls_executed == 1
+    guard.reset()
+    assert guard.tool_calls_executed == 0
+
+
 # ─── Report ───
 print("\n" + "=" * 50)
 print(f"  Results: {PASS} passed, {FAIL} failed")
