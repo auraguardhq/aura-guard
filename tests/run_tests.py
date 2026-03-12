@@ -1013,6 +1013,37 @@ def _():
     assert guard.tool_calls_executed == 0
 
 
+
+print("\n=== Side-Effect Cache Separation ===")
+
+@test("different ticket same args not generically cached")
+def _():
+    cfg = AuraGuardConfig(
+        secret_key=b"test-secret-key", side_effect_tools={"refund"},
+        side_effect_max_executed_per_run=3,
+    )
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    for tid in ["ticket-A", "ticket-B", "ticket-C"]:
+        c = ToolCall(name="refund", args={"order_id": "o1", "amount": 50}, ticket_id=tid)
+        d = g.on_tool_call_request(state=s, call=c)
+        assert d.action == PolicyAction.ALLOW, f"{tid}: {d.action.value} ({d.reason})"
+        g.on_tool_result(state=s, call=c, result=ToolResult(ok=True, payload="ok"))
+
+@test("same ticket same args uses idempotency ledger")
+def _():
+    cfg = AuraGuardConfig(secret_key=b"test-secret-key", side_effect_tools={"refund"})
+    g = AuraGuard(config=cfg)
+    s = g.new_state()
+    c = ToolCall(name="refund", args={"order_id": "o1"}, ticket_id="t1")
+    d1 = g.on_tool_call_request(state=s, call=c)
+    assert d1.action == PolicyAction.ALLOW
+    g.on_tool_result(state=s, call=c, result=ToolResult(ok=True, payload="ok"))
+    d2 = g.on_tool_call_request(state=s, call=c)
+    assert d2.action == PolicyAction.CACHE
+    assert d2.reason == "idempotent_replay"
+
+
 # ─── Report ───
 print("\n" + "=" * 50)
 print(f"  Results: {PASS} passed, {FAIL} failed")

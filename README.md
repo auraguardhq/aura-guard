@@ -506,7 +506,7 @@ If you don't set `side_effect_executed=True` on timeout, the guard may allow a r
 - Side-effect enforcement is at-most-once. Idempotency ledger keys survive serialization (since v0.3.9), so replay protection works across restarts if you serialize/restore state. Raw payloads are not persisted (PII safety).
 - Argument jitter detection uses token overlap, not semantic similarity. English-biased.
 - Cost estimates are configurable approximations, not actual billing data.
-- Serialized state and telemetry contain HMAC signatures only. In-memory caches hold tool payloads for caching and idempotency during a run.
+- Serialized state and telemetry contain HMAC signatures plus metadata (tool names, quarantine reasons, error classifications, cost amounts, run_id). Raw tool arguments and payloads are never persisted or emitted. In-memory caches hold tool payloads during a run only.
 
 For architecture details, see docs/ARCHITECTURE.md.
 

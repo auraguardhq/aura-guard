@@ -347,6 +347,20 @@ class AgentGuard:
             ticket_id: Optional ticket/session ID for idempotency.
             side_effect: Override whether this tool is a side-effect.
             **kwargs: Keyword arguments passed to fn AND used as tool args for guard signature tracking.
+
+        .. note:: Reserved keyword arguments
+
+           ``ticket_id`` and ``side_effect`` are consumed by the guard wrapper
+           and are NOT forwarded to ``fn``. If your tool function has parameters
+           named ``ticket_id`` or ``side_effect``, use the 3-method API instead.
+
+        .. warning:: Side-effect timeout handling
+
+           If a side-effect tool succeeds server-side but times out locally,
+           run() cannot mark side_effect_executed=True on the error path.
+           For tools where ambiguous execution is possible (payments, emails,
+           cancellations), use the 3-method API (check_tool / record_result)
+           so you can set side_effect_executed=True on timeout.
         """
         decision = self.check_tool(
             tool_name, args=kwargs, ticket_id=ticket_id, side_effect=side_effect,
@@ -395,6 +409,20 @@ class AgentGuard:
             tool_name: Override the tool name (defaults to fn.__name__).
             ticket_id: Optional ticket/session ID for idempotency.
             side_effect: Override whether this tool is a side-effect.
+
+        .. note:: Reserved keyword arguments
+
+           ``ticket_id`` and ``side_effect`` are consumed by the guard wrapper
+           and are NOT forwarded to ``fn``. If your tool function has parameters
+           named ``ticket_id`` or ``side_effect``, use the 3-method API instead.
+
+        .. warning:: Side-effect timeout handling
+
+           If a side-effect tool succeeds server-side but times out locally,
+           run() cannot mark side_effect_executed=True on the error path.
+           For tools where ambiguous execution is possible (payments, emails,
+           cancellations), use the 3-method API (check_tool / record_result)
+           so you can set side_effect_executed=True on timeout.
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:

@@ -1284,3 +1284,62 @@ class TestMCPAdapter:
         guard.reset()
         assert guard.tool_calls_executed == 0
         assert guard.cost_spent == 0
+
+
+class TestSideEffectCacheSeparation:
+    """Verify side-effect results don't leak into the generic repeat cache."""
+
+    def test_different_ticket_same_args_not_cached(self):
+        """Side-effect tool with same args but different ticket should NOT get generic CACHE."""
+        cfg = AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            side_effect_tools={"refund"},
+            side_effect_max_executed_per_run=3,
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        for tid in ["ticket-A", "ticket-B", "ticket-C"]:
+            call = ToolCall(name="refund", args={"order_id": "o1", "amount": 50}, ticket_id=tid)
+            d = guard.on_tool_call_request(state=state, call=call)
+            assert d.action == PolicyAction.ALLOW, (
+                f"{tid}: expected ALLOW, got {d.action.value} ({d.reason})"
+            )
+            guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload="refunded"))
+
+    def test_same_ticket_same_args_still_cached_by_ledger(self):
+        """Same ticket + same args should still get CACHE from idempotency ledger."""
+        cfg = AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            side_effect_tools={"refund"},
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        call = ToolCall(name="refund", args={"order_id": "o1", "amount": 50}, ticket_id="t1")
+        d1 = guard.on_tool_call_request(state=state, call=call)
+        assert d1.action == PolicyAction.ALLOW
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload="refunded"))
+
+        # Same ticket, same args → idempotency ledger should return CACHE
+        d2 = guard.on_tool_call_request(state=state, call=call)
+        assert d2.action == PolicyAction.CACHE
+        assert d2.reason == "idempotent_replay"
+
+    def test_non_side_effect_still_uses_generic_cache(self):
+        """Non-side-effect tools should still use the generic repeat cache as before."""
+        cfg = AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            repeat_toolcall_threshold=2,
+        )
+        guard = AuraGuard(config=cfg)
+        state = guard.new_state()
+
+        call = ToolCall(name="search_kb", args={"query": "test"})
+        d1 = guard.on_tool_call_request(state=state, call=call)
+        assert d1.action == PolicyAction.ALLOW
+        guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload="results"))
+
+        d2 = guard.on_tool_call_request(state=state, call=call)
+        assert d2.action == PolicyAction.CACHE
+        assert d2.reason == "identical_toolcall_loop_cache"

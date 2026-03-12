@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.5.1 — 2026-03-12
+
+### Fixes (from ChatGPT Pro deep audit)
+- **P0:** Side-effect tool results no longer enter the generic repeat cache. Previously, a side-effect call (e.g. refund) with identical args but a different ticket could be falsely suppressed by the generic `identical_toolcall_loop_cache` instead of being evaluated by the ticket-scoped idempotency ledger. Side-effect tools now exclusively use the idempotency ledger for dedup.
+- **P1:** MCP stdio example no longer prints to stdout (which corrupts JSON-RPC). Output redirected to stderr.
+- **P1:** Serialization no longer hardcodes `tool_query_sigs` truncation to 12 entries. Previously, users with `tool_loop_window > 12` would silently lose jitter history on state restore.
+- **P1:** MCP adapter now includes `injected_system` for REWRITE, `escalation_packet` for ESCALATE, and `finalized_output` for FINALIZE in returned messages. CACHE `json.dumps` now handles non-serializable payloads gracefully.
+- **P1:** Documented that `run()` / `@protect` cannot express `side_effect_executed=True` on exceptions — use 3-method API for ambiguous side-effect timeouts.
+- **P1:** Documented that `ticket_id` and `side_effect` are reserved kwargs in `run()` / `@protect` and not forwarded to the wrapped function.
+- **P1:** Fixed README privacy claim — serialized state contains HMAC signatures plus metadata (tool names, reasons, costs), not signatures only.
+- **P2:** `tool_call_counts` now increments only after all checks pass. Previously, a call blocked by sequence detection still incremented the per-tool cap counter.
+- **P2:** `tool_stream` now records only executed calls (calls that pass all checks), not attempted calls. Fixes sequence detection and repeat counting accuracy.
+- **P2:** Cached `ToolResult` entries are now shallow-copied on write to prevent caller mutation from affecting cached replays.
+
 ## 0.5.0 — 2026-03-12
 
 ### New Features

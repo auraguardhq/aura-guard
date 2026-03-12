@@ -168,7 +168,10 @@ class GuardedMCP:
                         payload = decision.cached_result.payload if decision.cached_result else None
                         if payload is None:
                             return "[AURA GUARD] CACHED: previous result (payload not available)"
-                        return f"[AURA GUARD] CACHED: {json.dumps(payload)}"
+                        try:
+                            return f"[AURA GUARD] CACHED: {json.dumps(payload)}"
+                        except (TypeError, ValueError):
+                            return f"[AURA GUARD] CACHED: {str(payload)}"
 
                     logger.warning(
                         "AuraGuard %s tool '%s': %s",
@@ -176,7 +179,14 @@ class GuardedMCP:
                         tool_name,
                         decision.reason,
                     )
-                    return f"[AURA GUARD] {decision.action.value.upper()}: {decision.reason}"
+                    msg = f"[AURA GUARD] {decision.action.value.upper()}: {decision.reason}"
+                    if decision.action == PolicyAction.REWRITE and decision.injected_system:
+                        msg += f"\n\nSYSTEM: {decision.injected_system}"
+                    elif decision.action == PolicyAction.ESCALATE and decision.escalation_packet:
+                        msg += f"\n\nESCALATION: {json.dumps(decision.escalation_packet)}"
+                    elif decision.action == PolicyAction.FINALIZE and decision.finalized_output:
+                        msg += f"\n\nFINAL OUTPUT: {decision.finalized_output}"
+                    return msg
 
                 return self._server.tool(*args, **kwargs)(async_guarded)
 
@@ -206,7 +216,10 @@ class GuardedMCP:
                     payload = decision.cached_result.payload if decision.cached_result else None
                     if payload is None:
                         return "[AURA GUARD] CACHED: previous result (payload not available)"
-                    return f"[AURA GUARD] CACHED: {json.dumps(payload)}"
+                    try:
+                        return f"[AURA GUARD] CACHED: {json.dumps(payload)}"
+                    except (TypeError, ValueError):
+                        return f"[AURA GUARD] CACHED: {str(payload)}"
 
                 logger.warning(
                     "AuraGuard %s tool '%s': %s",
@@ -214,7 +227,14 @@ class GuardedMCP:
                     tool_name,
                     decision.reason,
                 )
-                return f"[AURA GUARD] {decision.action.value.upper()}: {decision.reason}"
+                msg = f"[AURA GUARD] {decision.action.value.upper()}: {decision.reason}"
+                if decision.action == PolicyAction.REWRITE and decision.injected_system:
+                    msg += f"\n\nSYSTEM: {decision.injected_system}"
+                elif decision.action == PolicyAction.ESCALATE and decision.escalation_packet:
+                    msg += f"\n\nESCALATION: {json.dumps(decision.escalation_packet)}"
+                elif decision.action == PolicyAction.FINALIZE and decision.finalized_output:
+                    msg += f"\n\nFINAL OUTPUT: {decision.finalized_output}"
+                return msg
 
             return self._server.tool(*args, **kwargs)(sync_guarded)
 

@@ -202,6 +202,20 @@ class AsyncAgentGuard:
 
         If fn is a coroutine function, it will be awaited.
         All tool arguments must be keyword arguments.
+
+        .. note:: Reserved keyword arguments
+
+           ``ticket_id`` and ``side_effect`` are consumed by the guard wrapper
+           and are NOT forwarded to ``fn``. If your tool function has parameters
+           named ``ticket_id`` or ``side_effect``, use the 3-method API instead.
+
+        .. warning:: Side-effect timeout handling
+
+           If a side-effect tool succeeds server-side but times out locally,
+           run() cannot mark side_effect_executed=True on the error path.
+           For tools where ambiguous execution is possible (payments, emails,
+           cancellations), use the 3-method API (check_tool / record_result)
+           so you can set side_effect_executed=True on timeout.
         """
         decision = await self.check_tool(
             tool_name, args=kwargs, ticket_id=ticket_id, side_effect=side_effect,
@@ -237,6 +251,20 @@ class AsyncAgentGuard:
 
         See :meth:`AgentGuard.protect` for full documentation.
         All tool arguments must be keyword arguments.
+
+        .. note:: Reserved keyword arguments
+
+           ``ticket_id`` and ``side_effect`` are consumed by the guard wrapper
+           and are NOT forwarded to ``fn``. If your tool function has parameters
+           named ``ticket_id`` or ``side_effect``, use the 3-method API instead.
+
+        .. warning:: Side-effect timeout handling
+
+           If a side-effect tool succeeds server-side but times out locally,
+           run() cannot mark side_effect_executed=True on the error path.
+           For tools where ambiguous execution is possible (payments, emails,
+           cancellations), use the 3-method API (check_tool / record_result)
+           so you can set side_effect_executed=True on timeout.
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
