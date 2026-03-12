@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.0 — 2026-03-12
+
+### New Features
+- **MCP (Model Context Protocol) adapter.** `GuardedMCP` wraps FastMCP servers with automatic AuraGuard protection on every tool call. Loop detection, side-effect dedup, cost budgets — all enforced transparently. Denied calls return structured error messages to the LLM instead of crashing the server. Install: `pip install aura-guard[mcp]`.
+- New example: `examples/mcp_guarded_server.py` — ready-to-use MCP server with guarded tools for Claude Desktop, Cursor, or any MCP client.
+- `mcp` added as optional dependency in pyproject.toml.
+
 ## 0.4.0 — 2026-03-09
 
 ### New Features

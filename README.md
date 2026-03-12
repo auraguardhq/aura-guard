@@ -231,7 +231,7 @@ def run_tool(tool_name: str, args: dict):
     raise RuntimeError(f"Stopped: {decision.action.value} — {decision.reason}")
 ```
 
-Framework-specific adapters for OpenAI and LangChain are included. See examples/ for integration patterns.
+Framework-specific adapters for OpenAI, LangChain, and MCP are included. See examples/ for integration patterns.
 
 ### Strict mode (recommended in production)
 
@@ -324,6 +324,33 @@ agent.run("Process refund for order ORD-123")
 print(handler.summary)
 # {"cost_spent_usd": 0.12, "cost_saved_usd": 0.40, "blocks": 3, ...}
 ```
+
+
+
+### MCP (Model Context Protocol)
+```python
+from aura_guard.adapters.mcp_adapter import GuardedMCP
+
+mcp = GuardedMCP(
+    "Customer Support",
+    secret_key=b"your-secret-key",
+    side_effect_tools={"refund", "cancel"},
+    max_cost_per_run=1.00,
+)
+
+@mcp.tool()
+def search_kb(query: str) -> str:
+    return db.search(query)
+
+@mcp.tool(side_effect=True)
+def refund(order_id: str, amount: float) -> str:
+    return payments.refund(order_id, amount)
+
+# Works with Claude Desktop, Cursor, or any MCP client
+mcp.run(transport="stdio")
+```
+
+Install: `pip install aura-guard[mcp]`
 
 </details>
 

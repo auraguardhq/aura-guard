@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aura-guard"
-version = "0.4.0"
+version = "0.5.0"
 description = "At-most-once side-effect enforcement + circuit breaker for agent tool calls (loops, retries, duplicate side effects)."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,7 @@ dependencies = []
 
 [project.optional-dependencies]
 langchain = ["langchain-core>=0.1.0"]
+mcp = ["mcp>=1.0.0"]
 dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
 
 [project.scripts]

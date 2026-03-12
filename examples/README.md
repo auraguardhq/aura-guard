@@ -99,3 +99,26 @@ python examples/natural_loop_with_guard.py
 ```
 
 Videos: [Without guard](https://youtu.be/FkBsRK6OS-4) | [With guard](https://youtu.be/6U-YWF-w7wY)
+
+
+## 8) MCP Server with AuraGuard (requires `mcp` package)
+
+**mcp_guarded_server.py**
+Creates an MCP-compatible tool server where every tool call is automatically
+protected by AuraGuard. Connect from any MCP client (Claude Desktop, Cursor, etc.).
+```bash
+pip install mcp aura-guard
+python examples/mcp_guarded_server.py
+```
+
+Connect from Claude Desktop or Cursor:
+```json
+{
+    "mcpServers": {
+        "support": {
+            "command": "python",
+            "args": ["examples/mcp_guarded_server.py"]
+        }
+    }
+}
+```

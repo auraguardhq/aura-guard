@@ -1190,3 +1190,97 @@ class TestCostEventsCap:
                 guard.on_tool_result(state=state, call=call, result=ToolResult(ok=True, payload=f"r{i}"))
 
         assert len(state.cost_events) <= 5
+
+
+class TestMCPAdapter:
+    """Tests for the MCP adapter (without requiring the mcp package)."""
+
+    def test_import_without_mcp_raises(self):
+        """GuardedMCP should raise ImportError if mcp is not installed."""
+        # We test the adapter's guard logic by mocking, not by importing mcp.
+        # This test verifies the error message when mcp is missing.
+        from aura_guard.adapters import mcp_adapter
+
+        if not mcp_adapter.HAS_MCP:
+            with pytest.raises(ImportError, match="mcp"):
+                mcp_adapter.GuardedMCP("test", secret_key=b"test-key")
+
+    def test_guard_wrapping_logic_sync(self):
+        """Test that the guard check/execute/record cycle works correctly."""
+        # Simulate what GuardedMCP does internally without needing FastMCP
+        from aura_guard import AgentGuard, PolicyAction
+
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+        def search_kb(query):
+            return {"results": [query]}
+
+        # Simulate the guarded tool call pattern used in mcp_adapter
+        tool_name = "search_kb"
+        kwargs = {"query": "refund policy"}
+
+        decision = guard.check_tool(tool_name, args=kwargs)
+        assert decision.action == PolicyAction.ALLOW
+
+        result = search_kb(**kwargs)
+        guard.record_result(ok=True, payload=result)
+        assert result == {"results": ["refund policy"]}
+        assert guard.tool_calls_executed == 1
+
+    def test_guard_blocks_duplicate_side_effect(self):
+        """Test that side-effect dedup works as it would in MCP context."""
+        from aura_guard import AgentGuard, PolicyAction
+
+        guard = AgentGuard(
+            secret_key=b"test-secret-key",
+            side_effect_tools={"refund"},
+        )
+
+        # First refund — allowed
+        d1 = guard.check_tool("refund", args={"order_id": "o1", "amount": 50}, ticket_id="t1")
+        assert d1.action == PolicyAction.ALLOW
+        guard.record_result(ok=True, payload={"status": "refunded"})
+
+        # Same refund — should be cached (idempotent replay)
+        d2 = guard.check_tool("refund", args={"order_id": "o1", "amount": 50}, ticket_id="t1")
+        assert d2.action == PolicyAction.CACHE
+
+    def test_guard_denied_produces_error_string(self):
+        """Test that GuardDenied can be formatted as an MCP error message."""
+        from aura_guard.middleware import GuardDenied
+        from aura_guard.types import PolicyAction, PolicyDecision
+
+        decision = PolicyDecision(
+            action=PolicyAction.BLOCK,
+            reason="side_effect_limit_exceeded",
+        )
+        exc = GuardDenied(decision)
+
+        # This is what the MCP adapter returns to the LLM
+        error_msg = f"[AURA GUARD] {exc.action.value.upper()}: {exc.reason}"
+        assert "[AURA GUARD] BLOCK: side_effect_limit_exceeded" == error_msg
+
+    def test_guard_stats_accessible(self):
+        """Test that guard stats are accessible (as they would be via mcp.guard_stats)."""
+        from aura_guard import AgentGuard
+
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+        guard.check_tool("search_kb", args={"query": "test"})
+        guard.record_result(ok=True, payload="results")
+
+        stats = guard.stats
+        assert stats["tool_calls_executed"] == 1
+        assert stats["cost_spent_usd"] > 0
+
+    def test_guard_reset(self):
+        """Test that guard can be reset between MCP sessions."""
+        from aura_guard import AgentGuard
+
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+        guard.check_tool("search_kb", args={"query": "test"})
+        guard.record_result(ok=True, payload="results")
+        assert guard.tool_calls_executed == 1
+
+        guard.reset()
+        assert guard.tool_calls_executed == 0
+        assert guard.cost_spent == 0
