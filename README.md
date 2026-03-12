@@ -2,7 +2,10 @@
 
 [![Downloads](https://static.pepy.tech/badge/aura-guard)](https://pepy.tech/project/aura-guard)
 
-Reliability middleware for tool-using AI agents. Prevents tool loops, duplicate side-effects, and retry storms.
+Runtime safety for AI agents. Stops tool loops, duplicate side-effects, retry storms, and runaway costs.
+Database → transaction guard
+API     → rate limiter
+Agent   → AuraGuard
 
 ```python
 from aura_guard import AgentGuard, GuardDenied
@@ -27,11 +30,11 @@ except GuardDenied as e:
     handle_denial(e.decision)
 ```
 
-Aura Guard sits between your agent and its tools. Before each tool call, it returns a deterministic decision: ALLOW, CACHE, BLOCK, REWRITE, or ESCALATE. No LLM calls, sub-millisecond overhead. Core engine makes no network requests; optional webhook telemetry performs HTTP calls.
+That's it. The guard checks the call, executes the function, records the result. If the agent loops, the guard stops it. If the agent retries a refund, the guard blocks the duplicate.
 
-The core runtime uses 8 safety primitives, including multi-tool sequence loop detection and an MCP adapter for Claude Desktop, Cursor, and any MCP-compatible client.
+8 enforcement primitives · Zero dependencies · Sub-millisecond · MCP compatible · Python 3.10+ · Apache-2.0
 
-Python 3.10+ · Zero dependencies · Apache-2.0
+→ **[Get started in 5 minutes](docs/QUICKSTART.md)**
 
 
 ## Demo
@@ -54,6 +57,7 @@ Same agents. Same prompts. Same task. Guard detects the loop automatically.
 
 ## Table of contents
 
+- [**Quickstart (5 min)**](docs/QUICKSTART.md)
 - [Install](#install)
 - [The problem](#the-problem)
 - [Integration](#integration)
@@ -512,8 +516,21 @@ For architecture details, see docs/ARCHITECTURE.md.
 
 ---
 
+## Roadmap
+
+| Version | What | Status |
+|---------|------|--------|
+| ~~v0.5.1~~ | Cross-review fixes (P0 cache bug, MCP fixes, docs) | Shipped |
+| **v0.6.0** | MCP adapter v2 (session isolation, ticket propagation) | Next |
+| **v0.7.0** | Enhanced stall detection (diminishing returns, tool diversity) | Planned |
+| **v0.8.0** | SQLite + Redis persistence backends | Planned |
+| **v1.0.0** | Cross-agent guard (WorkflowGuard) | Planned |
+
+---
+
 ## Docs
 
+- **[`docs/QUICKSTART.md`](docs/QUICKSTART.md) — get started in 5 minutes**
 - `docs/ARCHITECTURE.md` — how the engine is structured
 - `docs/EVALUATION_PLAN.md` — how to evaluate credibly
 - `docs/LIVE_AB_EXAMPLE.md` — live A/B walkthrough and sample output
