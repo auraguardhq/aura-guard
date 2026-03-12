@@ -356,6 +356,17 @@ mcp.run(transport="stdio")
 
 Install: `pip install aura-guard[mcp]`
 
+For multi-client HTTP servers, use `session_mode="per_session"` so each client gets independent guard state:
+```python
+mcp = GuardedMCP(
+    "Support",
+    secret_key=b"your-secret-key",
+    session_mode="per_session",  # each client gets its own guard
+    max_sessions=100,
+)
+mcp.run(transport="streamable-http")
+```
+
 </details>
 
 ### Recommended: record real token usage (more accurate costs)
