@@ -4,7 +4,7 @@
 
 Runtime safety for AI agents. Not a budget cap. Not `max_steps`. A behavior guard.
 
-| What others do | What AuraGuard does |
+| Without AuraGuard | With AuraGuard |
 |----------------|---------------------|
 | `max_steps=10` kills the agent after 10 calls (productive or not) | Detects *which* calls are loops and stops only those |
 | Budget caps halt everything when money runs out | Tracks spend AND prevents the wasteful calls that burn it |
@@ -574,7 +574,7 @@ decision = await guard.check_tool("search_kb", args={"query": "test"})
 
 Aura Guard is v0.7 — the API is stabilizing but may change before v1.0.
 
-**Stable:** The 3-method API (check_tool / record_result / check_output), the convenience API (guard.run / @guard.protect / GuardDenied), the 6 PolicyAction values, and AuraGuardConfig.
+**Stable:** The 3-method API (check_tool / record_result / check_output), the convenience API (guard.run / @guard.protect / GuardDenied), run diagnostics (guard.report / guard.report_data), the 6 PolicyAction values, AuraGuardConfig, and the MCP adapter (GuardedMCP with session isolation).
 
 **May change:** Default threshold values, serialization format (versioned — old state will error, not silently corrupt), telemetry event names.
 
