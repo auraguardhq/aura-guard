@@ -530,7 +530,7 @@ decision = await guard.check_tool("search_kb", args={"query": "test"})
 
 ## Status & limitations
 
-Aura Guard is v0.6 — the API is stabilizing but may change before v1.0.
+Aura Guard is v0.7 — the API is stabilizing but may change before v1.0.
 
 **Stable:** The 3-method API (check_tool / record_result / check_output), the convenience API (guard.run / @guard.protect / GuardDenied), the 6 PolicyAction values, and AuraGuardConfig.
 
