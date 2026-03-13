@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.1 — 2026-03-13
+
+### New Features
+- **Single-file standalone version.** `standalone/aura_guard_standalone.py` contains the full guard engine, middleware, and convenience API in one file. No install needed: `curl -O` and import. Includes all 8 primitives, `guard.run()`, `@guard.protect`, `guard.report()`.
+- **README rewrite.** New "Not a budget tool" comparison table at the top. Report output shown above the fold. `curl` command for instant evaluation.
+
 ## 0.7.0 — 2026-03-13
 
 ### New Features

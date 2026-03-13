@@ -2,10 +2,20 @@
 
 [![Downloads](https://static.pepy.tech/badge/aura-guard)](https://pepy.tech/project/aura-guard)
 
-Runtime safety for AI agents. Stops tool loops, duplicate side-effects, retry storms, and runaway costs.
+Runtime safety for AI agents. Not a budget cap. Not `max_steps`. A behavior guard.
+
+| What others do | What AuraGuard does |
+|----------------|---------------------|
+| `max_steps=10` kills the agent after 10 calls (productive or not) | Detects *which* calls are loops and stops only those |
+| Budget caps halt everything when money runs out | Tracks spend AND prevents the wasteful calls that burn it |
+| Retry libraries add backoff to failing calls | Circuit-breaks the tool entirely after repeated failures |
+| Idempotency keys protect individual API writes | Guards the agent layer so the duplicate call never happens |
+
+```
 Database → transaction guard
 API     → rate limiter
 Agent   → AuraGuard
+```
 
 ```python
 from aura_guard import AgentGuard, GuardDenied
@@ -30,9 +40,41 @@ except GuardDenied as e:
     handle_denial(e.decision)
 ```
 
-That's it. The guard checks the call, executes the function, records the result. If the agent loops, the guard stops it. If the agent retries a refund, the guard blocks the duplicate.
+After the run, see exactly what happened:
+
+```
+══════════════════════════════════════════════════
+AURAGUARD RUN REPORT
+══════════════════════════════════════════════════
+
+Run efficiency: 72.0% productive (18 executed, 7 denied)
+  Cached: 4, Blocked: 1, Rewritten: 2
+
+Cost: $0.14 spent / $1.00 budget (86% remaining)
+
+Side-effects: 1 executed, 1 blocked
+  refund: 1 executed, 1 blocked
+
+Interventions by primitive:
+  [  4x] repeat_detection
+  [  2x] jitter_detection
+  [  1x] side_effect_gating
+
+Quarantined tools:
+  search_kb (jitter_loop)
+```
 
 8 enforcement primitives · Zero dependencies · Sub-millisecond · MCP compatible · Python 3.10+ · Apache-2.0
+
+**Try in 10 seconds (no install):**
+```bash
+curl -O https://raw.githubusercontent.com/auraguardhq/aura-guard/main/standalone/aura_guard_standalone.py
+```
+
+**Or install the full package:**
+```bash
+pip install aura-guard
+```
 
 → **[Get started in 5 minutes](docs/QUICKSTART.md)**
 
