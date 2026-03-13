@@ -2253,3 +2253,54 @@ class TestRunReport:
         assert AgentGuard._classify_primitive("sequence_loop:A > B") == "sequence_detection"
         assert AgentGuard._classify_primitive("max_calls_per_tool") == "per_tool_cap"
         assert AgentGuard._classify_primitive("unknown_reason") == "other"
+
+
+class TestStandalone:
+    """Verify the standalone single-file version works."""
+
+    def test_standalone_imports(self):
+        """Standalone file should be importable."""
+        import importlib.util
+        import os
+        standalone_path = os.path.join(
+            os.path.dirname(__file__), "..", "standalone", "aura_guard_standalone.py"
+        )
+        if not os.path.exists(standalone_path):
+            pytest.skip("standalone file not found")
+        spec = importlib.util.spec_from_file_location("aura_guard_standalone", standalone_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        # Core classes exist
+        assert hasattr(mod, "AgentGuard")
+        assert hasattr(mod, "GuardDenied")
+        assert hasattr(mod, "AuraGuard")
+        assert hasattr(mod, "PolicyAction")
+
+    def test_standalone_basic_flow(self):
+        """Standalone guard should work end-to-end."""
+        import importlib.util
+        import os
+        standalone_path = os.path.join(
+            os.path.dirname(__file__), "..", "standalone", "aura_guard_standalone.py"
+        )
+        if not os.path.exists(standalone_path):
+            pytest.skip("standalone file not found")
+        spec = importlib.util.spec_from_file_location("aura_guard_standalone", standalone_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        guard = mod.AgentGuard(secret_key=b"test-key", max_cost_per_run=1.00)
+
+        def search(query):
+            return f"results for {query}"
+
+        result = guard.run("search", search, query="test")
+        assert "results for test" in result
+
+        # Report should work
+        report = guard.report()
+        assert "AURAGUARD RUN REPORT" in report
+
+        data = guard.report_data()
+        assert data["summary"]["executed"] == 1
