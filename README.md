@@ -411,6 +411,40 @@ For advanced options, see `AuraGuardConfig` in `src/aura_guard/config.py`.
 7. Tool policy layer
 8. **Multi-tool sequence loop detection** — Detects repeating tool-call patterns (A→B→A→B, A→B→C→A→B→C). Catches multi-agent ping-pong and circular delegation. Quarantines the pattern and forces resolution.
 
+
+### Run report
+
+After a run, get a full diagnostic report:
+
+```python
+print(guard.report())
+```
+
+```
+══════════════════════════════════════════════════
+AURAGUARD RUN REPORT
+══════════════════════════════════════════════════
+
+Run efficiency: 72.0% productive (18 executed, 7 denied)
+  Cached: 4, Blocked: 1, Rewritten: 2
+
+Cost: $0.14 spent / $1.00 budget (86% remaining)
+
+Side-effects: 1 executed, 1 blocked
+  refund: 1 executed, 1 blocked
+
+Interventions by primitive:
+  [  4x] repeat_detection
+  [  2x] jitter_detection
+  [  1x] side_effect_gating
+
+Quarantined tools:
+  search_kb (jitter_loop)
+```
+
+For programmatic use: `guard.report_data()` returns a JSON-serializable dict.
+
+
 ## Shadow mode (evaluate before enforcing)
 
 Shadow mode lets you measure what Aura Guard would block without actually blocking anything. Every decision that would be BLOCK, CACHE, REWRITE, or ESCALATE is logged and counted, but the agent receives ALLOW instead.

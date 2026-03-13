@@ -2114,3 +2114,142 @@ class TestSideEffectCacheSeparation:
         d2 = guard.on_tool_call_request(state=state, call=call)
         assert d2.action == PolicyAction.CACHE
         assert d2.reason == "identical_toolcall_loop_cache"
+
+
+class TestRunReport:
+    """Tests for the run diagnostics and reporting feature."""
+
+    def test_report_data_structure(self):
+        """report_data() returns a well-structured dict."""
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+        guard.check_tool("search_kb", args={"query": "test"})
+        guard.record_result(ok=True, payload="results")
+        guard.check_tool("search_kb", args={"query": "test"})
+        guard.record_result(ok=True, payload="results")
+        guard.check_tool("search_kb", args={"query": "test"})
+
+        data = guard.report_data()
+
+        assert "summary" in data
+        assert "cost" in data
+        assert "interventions_by_primitive" in data
+        assert "interventions_by_tool" in data
+        assert "side_effects" in data
+        assert "quarantined_tools" in data
+        assert "top_interventions" in data
+        assert "interventions" in data
+
+        assert data["summary"]["executed"] == 2
+        assert data["summary"]["denied"] >= 1
+        assert data["summary"]["cache_hits"] >= 1
+
+    def test_report_formatted_output(self):
+        """report() returns a non-empty formatted string."""
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+
+        guard.check_tool("search_kb", args={"query": "test"})
+        guard.record_result(ok=True, payload="results")
+
+        text = guard.report()
+
+        assert "AURAGUARD RUN REPORT" in text
+        assert "Run efficiency" in text
+        assert "Cost:" in text
+
+    def test_report_tracks_interventions(self):
+        """Interventions are tracked with tool name, action, and reason."""
+        from aura_guard.config import ToolPolicy, ToolAccess
+
+        guard = AgentGuard(
+            secret_key=b"test-secret-key",
+            config=AuraGuardConfig(
+                secret_key=b"test-secret-key",
+                tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY)},
+            ),
+        )
+
+        d = guard.check_tool("forbidden", args={"x": 1})
+        assert d.action == PolicyAction.BLOCK
+
+        data = guard.report_data()
+        assert len(data["interventions"]) == 1
+        assert data["interventions"][0]["tool"] == "forbidden"
+        assert data["interventions"][0]["action"] == "block"
+
+    def test_report_side_effect_tracking(self):
+        """Side-effect executions and blocks appear in report."""
+        guard = AgentGuard(
+            secret_key=b"test-secret-key",
+            side_effect_tools={"refund"},
+        )
+
+        guard.check_tool("refund", args={"order_id": "o1"}, ticket_id="t1")
+        guard.record_result(ok=True, payload="done", side_effect_executed=True)
+
+        guard.check_tool("refund", args={"order_id": "o1"}, ticket_id="t1")
+
+        data = guard.report_data()
+        assert data["side_effects"]["executed"].get("refund", 0) == 1
+        assert data["summary"]["cache_hits"] >= 1
+
+    def test_report_quarantined_tools(self):
+        """Quarantined tools appear in report."""
+        guard = AgentGuard(
+            secret_key=b"test-secret-key",
+            max_calls_per_tool=2,
+        )
+
+        for i in range(3):
+            d = guard.check_tool("search", args={"q": f"query_{i}"})
+            if d.action == PolicyAction.ALLOW:
+                guard.record_result(ok=True, payload=f"r{i}")
+
+        data = guard.report_data()
+        assert "search" in data["quarantined_tools"]
+
+    def test_report_reset_clears_interventions(self):
+        """reset() clears the intervention log."""
+        guard = AgentGuard(secret_key=b"test-secret-key")
+
+        guard.check_tool("search", args={"q": "test"})
+        guard.record_result(ok=True)
+        guard.reset()
+
+        data = guard.report_data()
+        assert len(data["interventions"]) == 0
+        assert data["summary"]["total_calls"] == 0
+
+    def test_report_empty_run(self):
+        """Report works correctly with no tool calls."""
+        guard = AgentGuard(secret_key=b"test-secret-key")
+
+        data = guard.report_data()
+        assert data["summary"]["total_calls"] == 0
+        assert data["summary"]["efficiency_pct"] == 100.0
+
+        text = guard.report()
+        assert "AURAGUARD RUN REPORT" in text
+
+    def test_report_json_serializable(self):
+        """report_data() output is JSON-serializable."""
+        guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+        guard.check_tool("search", args={"q": "test"})
+        guard.record_result(ok=True, payload="results")
+
+        data = guard.report_data()
+        json_str = json.dumps(data)
+        assert isinstance(json_str, str)
+
+    def test_classify_primitive(self):
+        """_classify_primitive maps reasons to correct primitive names."""
+        assert AgentGuard._classify_primitive("identical_toolcall_loop_cache") == "repeat_detection"
+        assert AgentGuard._classify_primitive("arg_jitter_detected") == "jitter_detection"
+        assert AgentGuard._classify_primitive("error_circuit_breaker") == "circuit_breaker"
+        assert AgentGuard._classify_primitive("idempotent_replay") == "side_effect_gating"
+        assert AgentGuard._classify_primitive("stall_detected") == "stall_detection"
+        assert AgentGuard._classify_primitive("cost_budget_exceeded") == "cost_budget"
+        assert AgentGuard._classify_primitive("policy_deny:forbidden") == "tool_policy"
+        assert AgentGuard._classify_primitive("sequence_loop:A > B") == "sequence_detection"
+        assert AgentGuard._classify_primitive("max_calls_per_tool") == "per_tool_cap"
+        assert AgentGuard._classify_primitive("unknown_reason") == "other"

@@ -140,6 +140,7 @@ class AgentGuard:
         self.tool_calls_denied: int = 0    # guard prevented execution (block + cache + rewrite + escalate)
         self.shadow_would_deny: int = 0    # shadow mode: would have denied but allowed
         self.missed_results: int = 0       # check_tool called before prior ALLOW had record_result
+        self._interventions: List[Dict[str, str]] = []
 
     # ─────────────────────────────────────────
     # 3-Method API
@@ -198,6 +199,7 @@ class AgentGuard:
         # Shadow mode: log the decision but override to ALLOW
         if self._shadow and decision.action != PolicyAction.ALLOW:
             self.shadow_would_deny += 1
+            self._interventions.append({"tool": name, "action": "shadow_deny", "reason": decision.reason})
             self._guard._emit(
                 "shadow_would_deny", state=self._state,
                 tool=name, original_action=decision.action.value,
@@ -215,10 +217,12 @@ class AgentGuard:
             self._last_call = None
             self.blocks += 1
             self.tool_calls_denied += 1
+            self._interventions.append({"tool": name, "action": "block", "reason": decision.reason})
         elif decision.action == PolicyAction.CACHE:
             self._last_call = None
             self.cache_hits += 1
             self.tool_calls_denied += 1
+            self._interventions.append({"tool": name, "action": "cache", "reason": decision.reason})
             # Auto-record cached results
             if decision.cached_result:
                 self._guard.on_tool_result(
@@ -228,10 +232,12 @@ class AgentGuard:
             self._last_call = None
             self.rewrite_decisions += 1
             self.tool_calls_denied += 1
+            self._interventions.append({"tool": name, "action": "rewrite", "reason": decision.reason})
         elif decision.action in (PolicyAction.ESCALATE, PolicyAction.FINALIZE):
             self._last_call = None
             self.escalations += 1
             self.tool_calls_denied += 1
+            self._interventions.append({"tool": name, "action": decision.action.value, "reason": decision.reason})
 
         return decision
 
@@ -294,8 +300,10 @@ class AgentGuard:
 
             if decision.action == PolicyAction.REWRITE:
                 self.rewrite_decisions += 1
+                self._interventions.append({"tool": "_llm_output", "action": "rewrite", "reason": decision.reason})
             elif decision.action in (PolicyAction.ESCALATE, PolicyAction.FINALIZE):
                 self.escalations += 1
+                self._interventions.append({"tool": "_llm_output", "action": "escalate", "reason": decision.reason})
         return decision
 
     def record_tokens(self, *, input_tokens: int = 0, output_tokens: int = 0,
@@ -510,7 +518,184 @@ class AgentGuard:
             "shadow_mode": self._shadow,
             "shadow_would_deny": self.shadow_would_deny,
             "missed_results": self.missed_results,
+            "interventions_count": len(self._interventions),
         }
+
+    def report_data(self) -> Dict[str, Any]:
+        """Structured run report for programmatic use / JSON export.
+
+        Returns a dict with:
+        - summary: overall call counts and efficiency
+        - cost: spending breakdown
+        - interventions_by_primitive: which enforcement rules triggered
+        - interventions_by_tool: per-tool breakdown
+        - side_effects: attempted vs executed
+        - quarantined_tools: which tools were quarantined and why
+        - top_interventions: most frequent intervention reasons
+        - interventions: full intervention log
+        """
+        total_calls = self.tool_calls_executed + self.tool_calls_denied
+        efficiency = round(self.tool_calls_executed / total_calls * 100, 1) if total_calls > 0 else 100.0
+
+        by_primitive: Dict[str, int] = {}
+        by_tool: Dict[str, Dict[str, int]] = {}
+        reason_counts: Dict[str, int] = {}
+
+        for iv in self._interventions:
+            reason = iv["reason"]
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+            tool = iv["tool"]
+            if tool not in by_tool:
+                by_tool[tool] = {"block": 0, "cache": 0, "rewrite": 0, "escalate": 0, "finalize": 0, "shadow_deny": 0}
+            action = iv["action"]
+            if action in by_tool[tool]:
+                by_tool[tool][action] += 1
+
+            primitive = self._classify_primitive(reason)
+            by_primitive[primitive] = by_primitive.get(primitive, 0) + 1
+
+        top = sorted(reason_counts.items(), key=lambda x: -x[1])
+
+
+        return {
+            "summary": {
+                "total_calls": total_calls,
+                "executed": self.tool_calls_executed,
+                "denied": self.tool_calls_denied,
+                "efficiency_pct": efficiency,
+                "blocks": self.blocks,
+                "cache_hits": self.cache_hits,
+                "rewrites": self.rewrite_decisions,
+                "escalations": self.escalations,
+            },
+            "cost": {
+                "spent_usd": self.cost_spent,
+                "limit_usd": self.cost_limit,
+                "remaining_usd": self.cost_remaining,
+                "token_cost_usd": self.reported_token_cost,
+            },
+            "interventions_by_primitive": by_primitive,
+            "interventions_by_tool": by_tool,
+            "side_effects": {
+                "attempted": dict(self._state.attempted_side_effect_calls),
+                "executed": dict(self._state.executed_side_effect_calls),
+            },
+            "quarantined_tools": self.quarantined_tools,
+            "top_interventions": [{"reason": r, "count": c} for r, c in top[:10]],
+            "stall_streak": self._state.stall_streak,
+            "shadow_mode": self._shadow,
+            "shadow_would_deny": self.shadow_would_deny,
+            "interventions": list(self._interventions),
+        }
+
+    @staticmethod
+    def _classify_primitive(reason: str) -> str:
+        """Map a decision reason to its enforcement primitive name."""
+        if reason.startswith("identical_toolcall"):
+            return "repeat_detection"
+        if reason.startswith("arg_jitter") or reason.startswith("query_jitter"):
+            return "jitter_detection"
+        if reason.startswith("error_") or reason.startswith("quarantine"):
+            return "circuit_breaker"
+        if reason.startswith("idempotent") or reason.startswith("side_effect"):
+            return "side_effect_gating"
+        if reason.startswith("stall") or reason.startswith("no_state_change"):
+            return "stall_detection"
+        if reason.startswith("cost_") or reason.startswith("budget"):
+            return "cost_budget"
+        if reason.startswith("policy_") or reason.startswith("tool_denied"):
+            return "tool_policy"
+        if reason.startswith("sequence_loop"):
+            return "sequence_detection"
+        if reason.startswith("max_calls"):
+            return "per_tool_cap"
+        if reason == "shadow_allow":
+            return "shadow_mode"
+        return "other"
+
+    def report(self) -> str:
+        """Formatted text report of guard activity for this run.
+
+        Returns a human-readable string ready to print or log.
+        """
+        d = self.report_data()
+        s = d["summary"]
+        c = d["cost"]
+        lines = []
+
+        lines.append("=" * 50)
+        lines.append("AURAGUARD RUN REPORT")
+        lines.append("=" * 50)
+        lines.append("")
+
+        lines.append(f"Run efficiency: {s['efficiency_pct']}% productive ({s['executed']} executed, {s['denied']} denied)")
+        if s["denied"] > 0:
+            parts = []
+            if s["cache_hits"]:
+                parts.append(f"Cached: {s['cache_hits']}")
+            if s["blocks"]:
+                parts.append(f"Blocked: {s['blocks']}")
+            if s["rewrites"]:
+                parts.append(f"Rewritten: {s['rewrites']}")
+            if s["escalations"]:
+                parts.append(f"Escalated: {s['escalations']}")
+            lines.append(f"  {', '.join(parts)}")
+        lines.append("")
+
+        if c["limit_usd"] is not None:
+            pct_remaining = round(c["remaining_usd"] / c["limit_usd"] * 100, 0) if c["limit_usd"] > 0 else 0
+            lines.append(f"Cost: ${c['spent_usd']:.2f} spent / ${c['limit_usd']:.2f} budget ({pct_remaining:.0f}% remaining)")
+        else:
+            lines.append(f"Cost: ${c['spent_usd']:.2f} spent (no budget limit)")
+        if c["token_cost_usd"] > 0:
+            lines.append(f"  Token cost: ${c['token_cost_usd']:.2f}")
+        lines.append("")
+
+        se = d["side_effects"]
+        if se["attempted"] or se["executed"]:
+            executed_total = sum(se["executed"].values())
+            attempted_total = sum(se["attempted"].values())
+            blocked_total = attempted_total - executed_total
+            lines.append(f"Side-effects: {executed_total} executed, {blocked_total} blocked")
+            for tool, count in se["executed"].items():
+                attempted = se["attempted"].get(tool, count)
+                if attempted > count:
+                    lines.append(f"  {tool}: {count} executed, {attempted - count} blocked")
+                else:
+                    lines.append(f"  {tool}: {count} executed")
+            lines.append("")
+
+        by_p = d["interventions_by_primitive"]
+        if by_p:
+            lines.append("Interventions by primitive:")
+            for prim, count in sorted(by_p.items(), key=lambda x: -x[1]):
+                lines.append(f"  [{count:>3}x] {prim}")
+            lines.append("")
+
+        top = d["top_interventions"]
+        if top:
+            lines.append("Top interventions:")
+            for item in top[:5]:
+                lines.append(f"  [{item['count']:>3}x] {item['reason']}")
+            lines.append("")
+
+        qt = d["quarantined_tools"]
+        if qt:
+            lines.append("Quarantined tools:")
+            for tool, reason in qt.items():
+                lines.append(f"  {tool} ({reason})")
+            lines.append("")
+
+        if d["stall_streak"] > 0:
+            lines.append(f"Stall streak: {d['stall_streak']} consecutive stall detections")
+            lines.append("")
+
+        if d["shadow_mode"]:
+            lines.append(f"Shadow mode: ON ({d['shadow_would_deny']} calls would have been denied)")
+            lines.append("")
+
+        return "\n".join(lines)
 
     @property
     def summary(self) -> Dict[str, Any]:
@@ -530,3 +715,4 @@ class AgentGuard:
         self.tool_calls_denied = 0
         self.shadow_would_deny = 0
         self.missed_results = 0
+        self._interventions = []
