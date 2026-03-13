@@ -175,6 +175,15 @@ class AsyncAgentGuard:
     def missed_results(self) -> int:
         return self._sync.missed_results
 
+
+    def report_data(self) -> Dict[str, Any]:
+        """Structured run report. See AgentGuard.report_data()."""
+        return self._sync.report_data()
+
+    def report(self) -> str:
+        """Formatted text report. See AgentGuard.report()."""
+        return self._sync.report()
+
     @property
     def stats(self) -> Dict[str, Any]:
         return self._sync.stats

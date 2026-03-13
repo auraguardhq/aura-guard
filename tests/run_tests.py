@@ -1075,6 +1075,66 @@ def _():
     assert d2.reason == "idempotent_replay"
 
 
+print("\n=== Run Diagnostics & Reporting ===")
+
+@test("report_data returns structured dict")
+def _():
+    guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+    guard.check_tool("search", args={"q": "test"})
+    guard.record_result(ok=True, payload="ok")
+    guard.check_tool("search", args={"q": "test"})
+    guard.record_result(ok=True, payload="ok")
+    guard.check_tool("search", args={"q": "test"})
+    data = guard.report_data()
+    assert "summary" in data
+    assert "interventions" in data
+    assert data["summary"]["executed"] == 2
+    assert data["summary"]["cache_hits"] >= 1
+
+@test("report returns formatted text")
+def _():
+    guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+    guard.check_tool("search", args={"q": "test"})
+    guard.record_result(ok=True)
+    text = guard.report()
+    assert "AURAGUARD RUN REPORT" in text
+    assert "Run efficiency" in text
+
+@test("interventions tracked with tool name and action")
+def _():
+    from aura_guard.config import ToolPolicy, ToolAccess
+    guard = AgentGuard(
+        secret_key=b"test-secret-key",
+        config=AuraGuardConfig(
+            secret_key=b"test-secret-key",
+            tool_policies={"forbidden": ToolPolicy(access=ToolAccess.DENY)},
+        ),
+    )
+    guard.check_tool("forbidden", args={"x": 1})
+    data = guard.report_data()
+    assert len(data["interventions"]) == 1
+    assert data["interventions"][0]["tool"] == "forbidden"
+    assert data["interventions"][0]["action"] == "block"
+
+@test("report reset clears interventions")
+def _():
+    guard = AgentGuard(secret_key=b"test-secret-key")
+    guard.check_tool("search", args={"q": "test"})
+    guard.record_result(ok=True)
+    guard.reset()
+    data = guard.report_data()
+    assert len(data["interventions"]) == 0
+
+@test("report_data is JSON serializable")
+def _():
+    guard = AgentGuard(secret_key=b"test-secret-key", max_cost_per_run=1.00)
+    guard.check_tool("search", args={"q": "test"})
+    guard.record_result(ok=True)
+    data = guard.report_data()
+    s = json.dumps(data)
+    assert isinstance(s, str)
+
+
 # ─── Report ───
 print("\n" + "=" * 50)
 print(f"  Results: {PASS} passed, {FAIL} failed")

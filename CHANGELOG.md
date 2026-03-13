@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.7.0 — 2026-03-13
+
+### New Features
+- **Run diagnostics and reporting.** `guard.report()` returns a formatted text report of guard activity: call efficiency, cost breakdown, interventions by primitive, per-tool breakdown, side-effect summary, quarantined tools, and top intervention reasons. `guard.report_data()` returns the same data as a JSON-serializable dict.
+- Intervention log tracks every non-ALLOW decision with tool name, action, and reason. Accessible via `report_data()["interventions"]`.
+- Shadow mode interventions (would-deny) are also tracked in the intervention log.
+- `AsyncAgentGuard` exposes `report()` and `report_data()` via delegation.
+
 ## 0.6.0 — 2026-03-12
 
 ### New Features
